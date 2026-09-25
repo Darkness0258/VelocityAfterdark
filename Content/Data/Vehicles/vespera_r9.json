@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "vehicleId": "vespera_r9",
+  "name": "Vespera R9",
+  "manufacturer": "Vespera Automotive",
+  "drivetrain": "AWD",
+  "massKg": 1490,
+  "idleRpm": 950,
+  "redlineRpm": 8600,
+  "torqueCurve": [
+    {
+      "rpm": 900,
+      "torqueNm": 260
+    },
+    {
+      "rpm": 1800,
+      "torqueNm": 470
+    },
+    {
+      "rpm": 3200,
+      "torqueNm": 620
+    },
+    {
+      "rpm": 4700,
+      "torqueNm": 720
+    },
+    {
+      "rpm": 6200,
+      "torqueNm": 780
+    },
+    {
+      "rpm": 7400,
+      "torqueNm": 760
+    },
+    {
+      "rpm": 8200,
+      "torqueNm": 700
+    },
+    {
+      "rpm": 8600,
+      "torqueNm": 620
+    }
+  ],
+  "gearRatios": [
+    3.15,
+    2.08,
+    1.56,
+    1.24,
+    1.02,
+    0.84,
+    0.72
+  ],
+  "reverseGearRatio": 3.0,
+  "finalDrive": 3.35,
+  "drivetrainEfficiency": 0.85,
+  "engineBrakingNm": 58,
+  "upshiftRpm": 8100,
+  "downshiftRpm": 3000,
+  "shiftTimeSeconds": 0.15,
+  "wheelRadiusM": 0.36,
+  "wheelAnchorsCm": [
+    [
+      154,
+      -92,
+      0
+    ],
+    [
+      154,
+      92,
+      0
+    ],
+    [
+      -148,
+      -92,
+      0
+    ],
+    [
+      -148,
+      92,
+      0
+    ]
+  ],
+  "centerOfMassOffsetCm": [
+    0,
+    0,
+    -22
+  ],
+  "suspensionRestLengthM": 0.4,
+  "suspensionTravelM": 0.22,
+  "springRateNPerM": 48000,
+  "dampingNsPerM": 5200,
+  "tireFriction": 1.23,
+  "tireLoadSensitivity": 0.12,
+  "lateralStiffnessNPerRad": 39000,
+  "rollingResistance": 0.014,
+  "maxBrakeForceN": 25000,
+  "frontBrakeBias": 0.57,
+  "dragCoefficient": 0.28,
+  "frontalAreaM2": 2.14,
+  "downforceCoefficient": 0.52,
+  "maxSteeringDegrees": 29,
+  "highSpeedSteeringDegrees": 4.6,
+  "steeringFalloffMps": 26,
+  "steeringResponsePerSecond": 5.8,
+  "bodyStyle": "hypercar",
+  "engineCylinders": 8,
+  "bodyLengthCm": 472,
+  "bodyWidthCm": 196
+}

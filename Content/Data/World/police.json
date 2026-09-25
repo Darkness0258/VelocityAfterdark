@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "routePath": "Data/Races/dockside_circuit.json",
+  "patrolSpeedScale": 0.6,
+  "pursuitSpeedScales": [0.9, 0.98, 1.04, 1.1, 1.16],
+  "heatThresholdSeconds": [0, 20, 45, 80, 120],
+  "detectionDistanceM": 140,
+  "speedingKmh": 105,
+  "detectionGraceSeconds": 3,
+  "lostSightGraceSeconds": 3,
+  "searchSeconds": 30,
+  "cooldownSeconds": 12,
+  "bustSeconds": 8,
+  "bustDistanceM": 8,
+  "bustMaxSpeedKmh": 5,
+  "spawnMinDistanceM": 120,
+  "spawnMaxDistanceM": 220,
+  "senseIntervalSeconds": 0.2,
+  "maxUnits": 3
+}

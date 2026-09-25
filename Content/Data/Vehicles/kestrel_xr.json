@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "vehicleId": "kestrel_xr",
+  "name": "Kestrel XR",
+  "manufacturer": "Kestrel Automotive",
+  "drivetrain": "FWD",
+  "massKg": 1190,
+  "idleRpm": 800,
+  "redlineRpm": 6500,
+  "torqueCurve": [
+    {
+      "rpm": 800,
+      "torqueNm": 95
+    },
+    {
+      "rpm": 1700,
+      "torqueNm": 160
+    },
+    {
+      "rpm": 2700,
+      "torqueNm": 220
+    },
+    {
+      "rpm": 3900,
+      "torqueNm": 240
+    },
+    {
+      "rpm": 4800,
+      "torqueNm": 230
+    },
+    {
+      "rpm": 5800,
+      "torqueNm": 200
+    },
+    {
+      "rpm": 6500,
+      "torqueNm": 160
+    }
+  ],
+  "gearRatios": [
+    3.18,
+    2.05,
+    1.43,
+    1.08,
+    0.85
+  ],
+  "reverseGearRatio": 3.05,
+  "finalDrive": 4.15,
+  "drivetrainEfficiency": 0.91,
+  "engineBrakingNm": 35,
+  "upshiftRpm": 6050,
+  "downshiftRpm": 2350,
+  "shiftTimeSeconds": 0.25,
+  "wheelRadiusM": 0.34,
+  "wheelAnchorsCm": [
+    [
+      135,
+      -80,
+      0
+    ],
+    [
+      135,
+      80,
+      0
+    ],
+    [
+      -135,
+      -80,
+      0
+    ],
+    [
+      -135,
+      80,
+      0
+    ]
+  ],
+  "centerOfMassOffsetCm": [
+    0,
+    0,
+    -18
+  ],
+  "suspensionRestLengthM": 0.44,
+  "suspensionTravelM": 0.27,
+  "springRateNPerM": 31500,
+  "dampingNsPerM": 3600,
+  "tireFriction": 1.09,
+  "tireLoadSensitivity": 0.12,
+  "lateralStiffnessNPerRad": 28000,
+  "rollingResistance": 0.014,
+  "maxBrakeForceN": 15600,
+  "frontBrakeBias": 0.66,
+  "dragCoefficient": 0.34,
+  "frontalAreaM2": 2.0,
+  "downforceCoefficient": 0.06,
+  "maxSteeringDegrees": 35,
+  "highSpeedSteeringDegrees": 6.5,
+  "steeringFalloffMps": 23,
+  "steeringResponsePerSecond": 7.2,
+  "bodyStyle": "hatchback",
+  "engineCylinders": 4,
+  "bodyLengthCm": 448,
+  "bodyWidthCm": 174
+}

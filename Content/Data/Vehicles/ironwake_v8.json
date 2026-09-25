@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "vehicleId": "ironwake_v8",
+  "name": "Ironwake V8",
+  "manufacturer": "Ironwake Motor Company",
+  "drivetrain": "RWD",
+  "massKg": 1790,
+  "idleRpm": 750,
+  "redlineRpm": 6200,
+  "torqueCurve": [
+    {
+      "rpm": 750,
+      "torqueNm": 240
+    },
+    {
+      "rpm": 1300,
+      "torqueNm": 390
+    },
+    {
+      "rpm": 2200,
+      "torqueNm": 540
+    },
+    {
+      "rpm": 3200,
+      "torqueNm": 650
+    },
+    {
+      "rpm": 4000,
+      "torqueNm": 675
+    },
+    {
+      "rpm": 4800,
+      "torqueNm": 660
+    },
+    {
+      "rpm": 5600,
+      "torqueNm": 620
+    },
+    {
+      "rpm": 6200,
+      "torqueNm": 560
+    }
+  ],
+  "gearRatios": [
+    3.1,
+    2.16,
+    1.57,
+    1.22,
+    0.98,
+    0.79
+  ],
+  "reverseGearRatio": 3.0,
+  "finalDrive": 3.7,
+  "drivetrainEfficiency": 0.88,
+  "engineBrakingNm": 75,
+  "upshiftRpm": 5800,
+  "downshiftRpm": 2100,
+  "shiftTimeSeconds": 0.28,
+  "wheelRadiusM": 0.36,
+  "wheelAnchorsCm": [
+    [
+      158,
+      -88,
+      0
+    ],
+    [
+      158,
+      88,
+      0
+    ],
+    [
+      -150,
+      -88,
+      0
+    ],
+    [
+      -150,
+      88,
+      0
+    ]
+  ],
+  "centerOfMassOffsetCm": [
+    0,
+    0,
+    -25
+  ],
+  "suspensionRestLengthM": 0.47,
+  "suspensionTravelM": 0.28,
+  "springRateNPerM": 43000,
+  "dampingNsPerM": 4600,
+  "tireFriction": 1.08,
+  "tireLoadSensitivity": 0.12,
+  "lateralStiffnessNPerRad": 30000,
+  "rollingResistance": 0.014,
+  "maxBrakeForceN": 19000,
+  "frontBrakeBias": 0.63,
+  "dragCoefficient": 0.36,
+  "frontalAreaM2": 2.32,
+  "downforceCoefficient": 0.12,
+  "maxSteeringDegrees": 33,
+  "highSpeedSteeringDegrees": 5.0,
+  "steeringFalloffMps": 24,
+  "steeringResponsePerSecond": 5.7,
+  "bodyStyle": "muscle",
+  "engineCylinders": 8,
+  "bodyLengthCm": 496,
+  "bodyWidthCm": 190
+}

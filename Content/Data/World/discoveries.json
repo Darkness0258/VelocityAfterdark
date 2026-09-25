@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "locations": [
+    {"id":"glasswater_lights","name":"Glasswater Lights","description":"The old ferry road now belongs to late-night drivers.","position":[-18000,25000],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75},
+    {"id":"glass_coast_overlook","name":"Glass Coast Overlook","description":"The east highway catches the first light over Nova City.","position":[82000,0],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75},
+    {"id":"northfield_crossing","name":"Northfield Crossing","description":"A quiet stretch beyond the city's warehouses.","position":[-82000,0],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75},
+    {"id":"iron_quay_exchange","name":"Iron Quay Exchange","description":"Night-shift freight crews know every engine by its sound.","position":[-40000,48000],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75},
+    {"id":"nova_northline","name":"Nova Northline","description":"The northern boulevard joins the city lights to the foothills.","position":[0,62000],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75},
+    {"id":"vesper_gateway","name":"Vesper Gateway","description":"Local drivers gather where the city reaches Vesper.","position":[40000,50000],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75},
+    {"id":"sable_mile","name":"Sable Mile","description":"The western freight route opens into the Sable Flats.","position":[-62000,-62000],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75},
+    {"id":"motorsport_approach","name":"Motorsport Approach","description":"The northeastern road leads to Nova's motorsport grounds.","position":[82000,50000],"radiusCm":2200,"dwellSeconds":1.5,"credits":250,"reputation":75}
+  ]
+}

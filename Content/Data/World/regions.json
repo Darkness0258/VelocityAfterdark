@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "artStatus": "Original development geometry; no authored production districts",
+  "groundHalfExtent": [100000, 80000],
+  "roadWidth": 2400,
+  "cellSizeCm": 14000,
+  "loadRadiusCm": 28000,
+  "unloadRadiusCm": 36000,
+  "maximumLoadedCells": 24,
+  "cellOperationsPerUpdate": 2,
+  "updateBudgetMs": 2,
+  "roads": [
+    {"id": "coast_south_link", "start": [40000,-25000], "end": [82000,-25000]},
+    {"id": "coast_north_link", "start": [40000,25000], "end": [82000,25000]},
+    {"id": "glass_coast_highway", "start": [82000,-25000], "end": [82000,25000]},
+    {"id": "glass_coast_inner", "start": [61000,-25000], "end": [61000,25000]},
+    {"id": "northfield_south_link", "start": [-40000,-25000], "end": [-82000,-25000]},
+    {"id": "northfield_north_link", "start": [-40000,25000], "end": [-82000,25000]},
+    {"id": "northfield_highway", "start": [-82000,-25000], "end": [-82000,25000]},
+    {"id": "iron_quay_link", "start": [-40000,25000], "end": [-40000,62000]},
+    {"id": "vesper_link", "start": [40000,25000], "end": [40000,62000]},
+    {"id": "north_ring", "start": [-40000,62000], "end": [40000,62000]},
+    {"id": "sable_west_link", "start": [-82000,-25000], "end": [-82000,-62000]},
+    {"id": "sable_road", "start": [-82000,-62000], "end": [-40000,-62000]},
+    {"id": "sable_east_link", "start": [-40000,-62000], "end": [-40000,-25000]},
+    {"id": "motorsport_east_link", "start": [82000,25000], "end": [82000,62000]},
+    {"id": "motorsport_north_link", "start": [40000,62000], "end": [82000,62000]}
+  ],
+  "regions": [
+    {"id":"glass_coast","name":"Glass Coast","style":"coast","min":[45000,-33000],"max":[96000,30000],"seed":541,"propsPerCell":8},
+    {"id":"northfield","name":"Northfield","style":"countryside","min":[-96000,-33000],"max":[-45000,30000],"seed":643,"propsPerCell":12},
+    {"id":"iron_quay","name":"Iron Quay","style":"industrial","min":[-45000,30000],"max":[-10000,73000],"seed":747,"propsPerCell":9},
+    {"id":"nova_downtown","name":"Nova Downtown","style":"downtown","min":[-10000,30000],"max":[30000,73000],"seed":853,"propsPerCell":7},
+    {"id":"vesper","name":"Vesper Foothills","style":"mountain","min":[32000,32000],"max":[63000,73000],"seed":967,"propsPerCell":6},
+    {"id":"sable","name":"Sable Flats","style":"desert","min":[-96000,-73000],"max":[-40000,-35000],"seed":1061,"propsPerCell":8},
+    {"id":"nova_motorsport","name":"Nova Motorsport Park","style":"racing","min":[65000,33000],"max":[96000,73000],"seed":1181,"propsPerCell":6}
+  ]
+}

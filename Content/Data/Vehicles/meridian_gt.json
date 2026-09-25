@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "vehicleId": "meridian_gt",
+  "name": "Meridian GT",
+  "manufacturer": "Meridian Engineering",
+  "drivetrain": "AWD",
+  "massKg": 1660,
+  "idleRpm": 850,
+  "redlineRpm": 7400,
+  "torqueCurve": [
+    {
+      "rpm": 850,
+      "torqueNm": 180
+    },
+    {
+      "rpm": 1800,
+      "torqueNm": 285
+    },
+    {
+      "rpm": 3100,
+      "torqueNm": 415
+    },
+    {
+      "rpm": 4400,
+      "torqueNm": 455
+    },
+    {
+      "rpm": 5600,
+      "torqueNm": 440
+    },
+    {
+      "rpm": 6700,
+      "torqueNm": 395
+    },
+    {
+      "rpm": 7400,
+      "torqueNm": 320
+    }
+  ],
+  "gearRatios": [
+    3.45,
+    2.19,
+    1.58,
+    1.22,
+    0.99,
+    0.81,
+    0.67
+  ],
+  "reverseGearRatio": 3.2,
+  "finalDrive": 3.7,
+  "drivetrainEfficiency": 0.85,
+  "engineBrakingNm": 65,
+  "upshiftRpm": 6900,
+  "downshiftRpm": 2550,
+  "shiftTimeSeconds": 0.18,
+  "wheelRadiusM": 0.34,
+  "wheelAnchorsCm": [
+    [
+      135,
+      -80,
+      0
+    ],
+    [
+      135,
+      80,
+      0
+    ],
+    [
+      -135,
+      -80,
+      0
+    ],
+    [
+      -135,
+      80,
+      0
+    ]
+  ],
+  "centerOfMassOffsetCm": [
+    0,
+    0,
+    -18
+  ],
+  "suspensionRestLengthM": 0.44,
+  "suspensionTravelM": 0.27,
+  "springRateNPerM": 42500,
+  "dampingNsPerM": 4700,
+  "tireFriction": 1.2,
+  "tireLoadSensitivity": 0.12,
+  "lateralStiffnessNPerRad": 34500,
+  "rollingResistance": 0.014,
+  "maxBrakeForceN": 21400,
+  "frontBrakeBias": 0.6,
+  "dragCoefficient": 0.3,
+  "frontalAreaM2": 2.22,
+  "downforceCoefficient": 0.2,
+  "maxSteeringDegrees": 31,
+  "highSpeedSteeringDegrees": 5.6,
+  "steeringFalloffMps": 25,
+  "steeringResponsePerSecond": 6.0,
+  "bodyStyle": "sedan",
+  "engineCylinders": 8,
+  "bodyLengthCm": 462,
+  "bodyWidthCm": 184
+}

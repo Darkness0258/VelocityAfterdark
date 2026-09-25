@@ -1,0 +1,57 @@
+# Base PBR colors from the source glTF; specular converted for OBJ import.
+newmtl citycar_0_paintC
+Kd 0.550000 0.080000 0.070000
+Ks 0.145000 0.145000 0.145000
+Ns 15.301
+d 1.00000
+illum 2
+
+newmtl citycar_1_trim
+Kd 0.075000 0.080000 0.085000
+Ks 0.040000 0.040000 0.040000
+Ns 1.000
+d 1.00000
+illum 2
+
+newmtl citycar_2_glass
+Kd 0.200000 0.270000 0.320000
+Ks 0.085000 0.085000 0.085000
+Ns 553.556
+d 0.28000
+illum 2
+
+newmtl citycar_3_interior
+Kd 0.200000 0.210000 0.230000
+Ks 0.040000 0.040000 0.040000
+Ns 1.000
+d 1.00000
+illum 2
+
+newmtl citycar_4_lightWhite
+Kd 0.950000 0.960000 0.980000
+Ks 0.040000 0.040000 0.040000
+Ns 48.000
+d 1.00000
+illum 2
+
+newmtl citycar_5_alloy
+Kd 0.780000 0.790000 0.820000
+Ks 0.040000 0.040000 0.040000
+Ns 27.586
+d 1.00000
+illum 2
+
+newmtl citycar_6_lightAmber
+Kd 0.900000 0.500000 0.050000
+Ks 0.040000 0.040000 0.040000
+Ns 30.000
+d 1.00000
+illum 2
+
+newmtl citycar_7_lightRed
+Kd 0.720000 0.060000 0.050000
+Ks 0.040000 0.040000 0.040000
+Ns 30.000
+d 1.00000
+illum 2
+

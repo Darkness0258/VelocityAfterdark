@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "vehicleId": "aster_s6",
+  "paints": [
+    {"id":"mint", "name":"Glacier Mint", "color":[0.055,0.58,0.40]},
+    {"id":"pearl", "name":"Moon Pearl", "color":[0.76,0.81,0.86]},
+    {"id":"copper", "name":"Burnt Copper", "color":[0.66,0.16,0.045]},
+    {"id":"blue", "name":"Midnight Blue", "color":[0.025,0.095,0.46]},
+    {"id":"red", "name":"Signal Red", "color":[0.58,0.018,0.032]},
+    {"id":"graphite", "name":"Carbon Graphite", "color":[0.042,0.05,0.06]}
+  ],
+  "upgrades": [
+    {"id":"ecu", "name":"Stage 1 ECU", "description":"14% more torque across the rev range.", "price":3500, "torqueMultiplier":1.14, "gripMultiplier":1, "brakeMultiplier":1, "massMultiplier":1},
+    {"id":"tires", "name":"Sport Tires", "description":"10% more tire grip and cornering stiffness.", "price":2200, "torqueMultiplier":1, "gripMultiplier":1.10, "brakeMultiplier":1, "massMultiplier":1},
+    {"id":"brakes", "name":"Street Brake Kit", "description":"18% more available braking force; tire grip still limits stopping.", "price":1500, "torqueMultiplier":1, "gripMultiplier":1, "brakeMultiplier":1.18, "massMultiplier":1},
+    {"id":"weight", "name":"Lightweight Package", "description":"8% less vehicle mass with matched spring and damper rates.", "price":2500, "torqueMultiplier":1, "gripMultiplier":1, "brakeMultiplier":1, "massMultiplier":0.92}
+  ],
+  "tunes": [
+    {"id":"street", "name":"Street", "description":"Factory final drive: balanced acceleration and gearing.", "finalDriveMultiplier":1},
+    {"id":"sprint", "name":"Sprint", "description":"8% shorter gearing for stronger acceleration; lower gear-limited top speed.", "finalDriveMultiplier":1.08},
+    {"id":"touring", "name":"Touring", "description":"8% taller gearing for lower cruising RPM; weaker wheel torque.", "finalDriveMultiplier":0.92}
+  ]
+}

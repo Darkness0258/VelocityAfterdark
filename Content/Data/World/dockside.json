@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "nova_dockside",
+  "seed": 4417,
+  "units": "centimeters",
+  "groundHalfExtent": [100000, 80000],
+  "roadWidth": 2400,
+  "roads": [
+    {"id": "afterdark_avenue", "start": [-40000, 0], "end": [40000, 0]},
+    {"id": "glasswater_drive", "start": [-40000, 25000], "end": [40000, 25000]},
+    {"id": "freight_boulevard", "start": [-40000, -25000], "end": [40000, -25000]},
+    {"id": "west_quay", "start": [-40000, -25000], "end": [-40000, 25000]},
+    {"id": "foundry_cross", "start": [0, -25000], "end": [0, 25000]},
+    {"id": "east_cut", "start": [40000, -25000], "end": [40000, 25000]}
+  ],
+  "blocks": [
+    {"id": "foundry_yards", "kind": "warehouse", "min": [-36500, -21500], "max": [-3500, -3500], "columns": 5, "rows": 3, "minHeight": 900, "maxHeight": 1900},
+    {"id": "container_exchange", "kind": "containers", "min": [3500, -21500], "max": [36500, -3500], "columns": 7, "rows": 4, "minHeight": 280, "maxHeight": 850},
+    {"id": "glasswater", "kind": "tower", "min": [-36500, 3500], "max": [-3500, 21500], "columns": 6, "rows": 3, "minHeight": 4500, "maxHeight": 14500},
+    {"id": "signal_quarter", "kind": "midrise", "min": [3500, 3500], "max": [36500, 21500], "columns": 5, "rows": 3, "minHeight": 1800, "maxHeight": 4200}
+  ],
+  "lighting": {
+    "moonIntensityLux": 4.0,
+    "skyIntensity": 1.15,
+    "fogDensity": 0.018,
+    "streetLightSpacing": 4000,
+    "maxLocalLights": 24
+  }
+}

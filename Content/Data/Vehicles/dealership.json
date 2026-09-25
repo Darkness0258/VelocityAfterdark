@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "vehicles": [
+    {
+      "vehicleId": "aster_s6",
+      "price": 0,
+      "description": "Your starter coupe. Rear-wheel drive, balanced inline-six response and room to grow."
+    },
+    {
+      "vehicleId": "kestrel_xr",
+      "price": 8500,
+      "description": "A lightweight front-wheel-drive hatch with quick steering and short gearing for technical streets."
+    },
+    {
+      "vehicleId": "meridian_gt",
+      "price": 24000,
+      "description": "An all-wheel-drive V8 performance sedan with long legs and confident high-speed traction."
+    },
+    {
+      "vehicleId": "ironwake_v8",
+      "price": 52000,
+      "description": "A long-hood rear-drive V8 coupe with broad mid-range torque and a planted, deliberate chassis."
+    },
+    {
+      "vehicleId": "vespera_r9",
+      "price": 218000,
+      "description": "A low, wide all-wheel-drive hypercar built around high-revving V8 power, close ratios and useful downforce."
+    }
+  ]
+}

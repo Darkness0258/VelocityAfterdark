@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "initialHour": 23,
+  "initialWeather": "Rain",
+  "initialRainAmount": 0.82,
+  "initialWetness": 0.45,
+  "dayLengthSeconds": 1800,
+  "automaticWeather": true,
+  "weatherIntervalSeconds": 240,
+  "weatherSequence": ["Clear", "Rain", "Clear", "Fog"],
+  "transitionSeconds": 18,
+  "wettingSeconds": 50,
+  "dryingSeconds": 120,
+  "rainCount": 1024,
+  "rainRadiusCm": 1400,
+  "rainHeightCm": 1600,
+  "rainSpeedCmPerSecond": 1400,
+  "rainSeed": 9187,
+  "daySunIntensityLux": 24000,
+  "daySkyIntensity": 1100,
+  "dayExposureBias": -10
+}

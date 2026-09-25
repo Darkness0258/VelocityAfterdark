@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "vehicleId": "aster_s6",
+  "name": "Aster S6",
+  "manufacturer": "Aster Motorworks",
+  "drivetrain": "RWD",
+  "massKg": 1480,
+  "idleRpm": 850,
+  "redlineRpm": 7200,
+  "torqueCurve": [
+    {
+      "rpm": 850,
+      "torqueNm": 165
+    },
+    {
+      "rpm": 1800,
+      "torqueNm": 250
+    },
+    {
+      "rpm": 3000,
+      "torqueNm": 340
+    },
+    {
+      "rpm": 4200,
+      "torqueNm": 370
+    },
+    {
+      "rpm": 5400,
+      "torqueNm": 355
+    },
+    {
+      "rpm": 6500,
+      "torqueNm": 315
+    },
+    {
+      "rpm": 7200,
+      "torqueNm": 260
+    }
+  ],
+  "gearRatios": [
+    3.4,
+    2.18,
+    1.52,
+    1.16,
+    0.94,
+    0.78
+  ],
+  "reverseGearRatio": 3.1,
+  "finalDrive": 3.9,
+  "drivetrainEfficiency": 0.88,
+  "engineBrakingNm": 50,
+  "upshiftRpm": 6650,
+  "downshiftRpm": 2500,
+  "shiftTimeSeconds": 0.22,
+  "wheelRadiusM": 0.34,
+  "wheelAnchorsCm": [
+    [
+      135,
+      -80,
+      0
+    ],
+    [
+      135,
+      80,
+      0
+    ],
+    [
+      -135,
+      -80,
+      0
+    ],
+    [
+      -135,
+      80,
+      0
+    ]
+  ],
+  "centerOfMassOffsetCm": [
+    0,
+    0,
+    -18
+  ],
+  "suspensionRestLengthM": 0.44,
+  "suspensionTravelM": 0.27,
+  "springRateNPerM": 38000,
+  "dampingNsPerM": 4300,
+  "tireFriction": 1.15,
+  "tireLoadSensitivity": 0.12,
+  "lateralStiffnessNPerRad": 32000,
+  "rollingResistance": 0.014,
+  "maxBrakeForceN": 18500,
+  "frontBrakeBias": 0.62,
+  "dragCoefficient": 0.31,
+  "frontalAreaM2": 2.1,
+  "downforceCoefficient": 0.12,
+  "maxSteeringDegrees": 32,
+  "highSpeedSteeringDegrees": 6,
+  "steeringFalloffMps": 24,
+  "steeringResponsePerSecond": 6.5,
+  "bodyStyle": "coupe",
+  "engineCylinders": 6,
+  "bodyLengthCm": 456,
+  "bodyWidthCm": 176
+}

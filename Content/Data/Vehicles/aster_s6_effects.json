@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "nitrousSeconds": 5,
+  "rechargeSeconds": 22,
+  "rechargeDelaySeconds": 3,
+  "torqueMultiplier": 1.35
+}

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "maxCars": 4,
+  "speedScale": 0.58,
+  "redSeconds": 8,
+  "greenSeconds": 20
+}
