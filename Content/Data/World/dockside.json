@@ -20,10 +20,10 @@
     {"id": "signal_quarter", "kind": "midrise", "min": [3500, 3500], "max": [36500, 21500], "columns": 5, "rows": 3, "minHeight": 1800, "maxHeight": 4200}
   ],
   "lighting": {
-    "moonIntensityLux": 4.0,
-    "skyIntensity": 1.15,
+    "moonIntensityLux": 5.0,
+    "skyIntensity": 1.35,
     "fogDensity": 0.018,
-    "streetLightSpacing": 4000,
+    "streetLightSpacing": 3600,
     "maxLocalLights": 24
   }
 }

@@ -63,13 +63,15 @@ AADDistrict::AADDistrict()
         TEXT("/Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap"));
     Sky->SourceType = SLS_SpecifiedCubemap;
     Sky->SetCubemap(AmbientProbe.Object);
-    Sky->SetLightColor(FLinearColor(.48f, .65f, 1.f));
+    // Keep a cool night fill while lifting unlit facades enough to read their
+    // PBR response on the project's SM5 path (there is no baked/Lumen bounce).
+    Sky->SetLightColor(FLinearColor(.58f, .70f, .96f));
     Sky->SetRealTimeCaptureEnabled(false);
     static ConstructorHelpers::FObjectFinder<UStaticMesh> ParkedCarMesh(
         TEXT("/Game/Velocity/External/CityCarStaticFinal/SM_CC0_CityCar.SM_CC0_CityCar"));
     if (ParkedCarMesh.Succeeded()) ParkedCityCarMesh = ParkedCarMesh.Object;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> AsphaltMaterial(
-        TEXT("/Game/Velocity/Materials/M_Asphalt_Smooth.M_Asphalt_Smooth"));
+        TEXT("/Game/Velocity/Materials/M_Asphalt_PolyHaven.M_Asphalt_PolyHaven"));
     if (AsphaltMaterial.Succeeded()) DetailedAsphaltMaterial = AsphaltMaterial.Object;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> BuildingMaterial(
         TEXT("/Game/Velocity/Materials/M_Building_PBR.M_Building_PBR"));
@@ -98,6 +100,13 @@ AADDistrict::AADDistrict()
     PostProcess->Settings.AutoExposureBias = 0.f;
     PostProcess->Settings.bOverride_BloomIntensity = true;
     PostProcess->Settings.BloomIntensity = 0.2f;
+    // SSR is already the configured SM5 reflection method. Use a restrained
+    // quality budget so wet-road and clear-coat highlights have a readable
+    // response without defaulting to the highest sampling cost.
+    PostProcess->Settings.bOverride_ScreenSpaceReflectionQuality = true;
+    PostProcess->Settings.ScreenSpaceReflectionQuality = 35.f;
+    PostProcess->Settings.bOverride_ScreenSpaceReflectionIntensity = true;
+    PostProcess->Settings.ScreenSpaceReflectionIntensity = 62.f;
 }
 
 void AADDistrict::BeginPlay()

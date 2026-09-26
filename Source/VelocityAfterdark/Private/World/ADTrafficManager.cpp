@@ -1,5 +1,6 @@
 #include "World/ADTrafficManager.h"
 #include "World/ADAtmosphere.h"
+#include "World/ADPoliceDirector.h"
 #include "Core/ADGameMode.h"
 #include "Player/ADVehiclePawn.h"
 #include "Vehicle/ADVehiclePhysicsComponent.h"
@@ -192,6 +193,14 @@ bool AADTrafficManager::RemoveRetiredCars(float DeltaSeconds)
 
 bool AADTrafficManager::IsSignalRed() const { return SignalTime>=GreenSeconds; }
 
+int32 AADTrafficManager::GetEmergencyYieldCount() const
+{
+    int32 Count=0;
+    for (const UADRaceDriverComponent* Driver:Drivers)
+        if (IsValid(Driver) && Driver->IsEmergencyYielding()) ++Count;
+    return Count;
+}
+
 void AADTrafficManager::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -211,6 +220,9 @@ void AADTrafficManager::Tick(float DeltaSeconds)
         SignalMaterial->SetVectorParameterValue(TEXT("BaseColor"),Color);
     }
     bPreviousRed=bRed;
+    const AADPoliceDirector* Police=nullptr;
+    if (const auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>()) Police=Mode->GetPoliceDirector();
+    const bool bPursuit=Police && Police->GetState()==EADPoliceState::Pursuit && Police->GetHeat()>0;
     for (int32 Index=0;Index<Cars.Num();++Index)
     {
         auto* Car=Cars[Index].Get(); auto* Driver=Drivers[Index].Get();
@@ -223,6 +235,9 @@ void AADTrafficManager::Tick(float DeltaSeconds)
         const double Progress=Route.ClosestDistanceM(Position,ErrorM);
         if (ErrorM>=35. || Car->GetActorUpVector().Z<=.3f) { RetireCar(Index); continue; }
         const double Speed=FMath::Abs(Car->GetPhysics()->GetTelemetry().SpeedKmh)/3.6;
+        const bool bEmergencyYield=bPursuit
+            && FVector::DistSquared2D(Position,Player->GetActorLocation())<FMath::Square(3500.);
+        Driver->SetEmergencyYield(bEmergencyYield,Index%2==0 ? 285.f : -285.f);
         bool bStop=false;
         if (bRed)
         {

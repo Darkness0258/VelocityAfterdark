@@ -6,6 +6,7 @@
 #include "Vehicle/ADVehiclePhysicsComponent.h"
 #include "Components/BoxComponent.h"
 #include "Engine/World.h"
+#include "Misc/Crc.h"
 
 namespace
 {
@@ -31,25 +32,35 @@ bool UADRaceDriverComponent::Initialize(AADVehiclePawn* Car, const FADRaceDefini
     Physics = nullptr;
     Definition = nullptr;
     Competitors.Reset();
+    const int32 ExpectedDistanceCount = Route && Route->Laps == 0
+        ? Route->RoutePoints.Num() - 1 : (Route ? Route->RoutePoints.Num() : 0);
     if (!IsValid(Car) || !Car->HasAuthority() || !Car->GetPhysics() || !Car->GetPhysics()->IsReady() ||
-        !Route || Route->RoutePoints.Num() < 3 || Route->RoutePoints.Num() != Route->RouteDistancesM.Num() ||
+        !Route || Route->RoutePoints.Num() < 3 || ExpectedDistanceCount < 2 ||
+        ExpectedDistanceCount != Route->RouteDistancesM.Num() ||
         !FMath::IsFinite(Route->RouteLengthM) || Route->RouteLengthM < 50. ||
         !FMath::IsFinite(SpeedScale) || SpeedScale < .4f || SpeedScale > 1.3f ||
         !FMath::IsFinite(LaneOffsetCm)) return false;
 
     const FADVehicleDefinition& CarDefinition = Car->GetPhysics()->GetDefinition();
     if (CarDefinition.WheelAnchorsCm.Num() != 4) return false;
-    for (int32 Index = 0; Index < Route->RoutePoints.Num(); ++Index)
+    for (const FADRaceRoutePoint& Point : Route->RoutePoints)
     {
-        const FADRaceRoutePoint& Point = Route->RoutePoints[Index];
-        const double DistanceM = Route->RouteDistancesM[Index];
         if (Point.Position.ContainsNaN() || !FMath::IsFinite(Point.SpeedKmh) || Point.SpeedKmh < 10. ||
-            Point.SpeedKmh > 200. || !FMath::IsFinite(DistanceM) || DistanceM < 0. || DistanceM >= Route->RouteLengthM ||
+            Point.SpeedKmh > 200.) return false;
+    }
+    for (int32 Index = 0; Index < Route->RouteDistancesM.Num(); ++Index)
+    {
+        const double DistanceM = Route->RouteDistancesM[Index];
+        if (!FMath::IsFinite(DistanceM) || DistanceM < 0. || DistanceM >= Route->RouteLengthM ||
             (Index > 0 && DistanceM <= Route->RouteDistancesM[Index - 1])) return false;
     }
     Vehicle = Car;
     Physics = Car->GetPhysics();
     Definition = Route;
+    DriverIdentity.Reset();
+    Personality=FADDriverPersonality{};
+    DriverSeed=0;
+    bEmergencyYield=false;
     DriverSpeedScale = SpeedScale;
     BaseLaneOffsetCm = FMath::Clamp(static_cast<double>(LaneOffsetCm), -MaxLaneOffsetCm, MaxLaneOffsetCm);
     CruiseSpeedMps = 0.;
@@ -67,6 +78,37 @@ bool UADRaceDriverComponent::Initialize(AADVehiclePawn* Car, const FADRaceDefini
     RecoveryAttemptCount = AvoidanceCount = OvertakeCount = 0;
     ResetDriver();
     return true;
+}
+
+bool UADRaceDriverComponent::SetPersonality(const FString& StableDriverId, const FADDriverPersonality& InPersonality)
+{
+    if (StableDriverId.IsEmpty() || StableDriverId.Len() > 48 || StableDriverId != StableDriverId.ToLower()
+        || !FMath::IsFinite(InPersonality.OvertakeAggression) || InPersonality.OvertakeAggression < 0.f || InPersonality.OvertakeAggression > 1.f
+        || !FMath::IsFinite(InPersonality.BrakingConservatism) || InPersonality.BrakingConservatism < 0.f || InPersonality.BrakingConservatism > 1.f
+        || !FMath::IsFinite(InPersonality.PressureMistakeFrequency) || InPersonality.PressureMistakeFrequency < 0.f
+        || InPersonality.PressureMistakeFrequency > 1.f) return false;
+    for (const TCHAR Character : StableDriverId)
+        if ((Character < TEXT('a') || Character > TEXT('z'))
+            && (Character < TEXT('0') || Character > TEXT('9')) && Character != TEXT('_')) return false;
+    DriverIdentity=StableDriverId;
+    DriverSeed=FCrc::StrCrc32(*DriverIdentity);
+    Personality=InPersonality;
+    LastMistakeWindow=INDEX_NONE;
+    MistakeSeconds=0.f;
+    return true;
+}
+
+void UADRaceDriverComponent::SetEmergencyYield(bool bYield, float ShoulderOffsetCm)
+{
+    if (!FMath::IsFinite(ShoulderOffsetCm)) return;
+    bEmergencyYield=bYield;
+    EmergencyShoulderOffsetCm=FMath::Clamp(ShoulderOffsetCm,static_cast<float>(-MaxLaneOffsetCm),static_cast<float>(MaxLaneOffsetCm));
+    if (bEmergencyYield)
+    {
+        PassingVehicle.Reset();
+        DesiredLaneOffsetCm=EmergencyShoulderOffsetCm;
+    }
+    else if (!PassingVehicle.IsValid()) DesiredLaneOffsetCm=BaseLaneOffsetCm;
 }
 
 void UADRaceDriverComponent::SetCompetitors(const TArray<AADVehiclePawn*>& Cars)
@@ -115,6 +157,9 @@ void UADRaceDriverComponent::ResetDriver()
     ConsecutiveRecoveryAttempts = 0;
     bNeedsRecovery = false;
     bWasAvoiding = false;
+    bUnderPressure = false;
+    MistakeSeconds = 0.f;
+    LastMistakeWindow = INDEX_NONE;
     // Lifetime counters intentionally survive a managed reset for honest results.
     if (Physics.IsValid()) Physics->SetControls(0.f, 1.f, 0.f, false);
 }
@@ -145,6 +190,7 @@ void UADRaceDriverComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 double UADRaceDriverComponent::SignedRouteGapM(double OtherProgressM, double OwnProgressM) const
 {
+    if (Definition->Laps == 0) return OtherProgressM - OwnProgressM;
     double Gap = FMath::Fmod(OtherProgressM - OwnProgressM + Definition->RouteLengthM, Definition->RouteLengthM);
     if (Gap > Definition->RouteLengthM * .5) Gap -= Definition->RouteLengthM;
     return Gap;
@@ -207,6 +253,7 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
     AADVehiclePawn* Leader = nullptr;
     double LeaderGapM = 100.;
     double LeaderSpeedMps = 0.;
+    bUnderPressure = false;
     for (const TWeakObjectPtr<AADVehiclePawn>& Other : Competitors)
     {
         if (!Other.IsValid()) continue;
@@ -214,10 +261,12 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
         const FVector OtherPosition = Other->GetActorLocation();
         const double OtherProgress = Definition->ClosestDistanceM(OtherPosition, OtherErrorM);
         const double Gap = SignedRouteGapM(OtherProgress, ProgressM);
-        if (OtherErrorM > 12. || Gap < 0. || Gap > 50.) continue;
+        if (OtherErrorM > 12.) continue;
         const double OtherOffset = FVector2D::DotProduct(FVector2D(OtherPosition.X, OtherPosition.Y) -
             Definition->PointAtDistance(OtherProgress), RouteRightAt(OtherProgress));
         if (FMath::Abs(OtherOffset - OwnOffset) > MinimumLaneSeparationCm) continue;
+        if (FMath::Abs(Gap) < 15.) bUnderPressure = true;
+        if (Gap < 0. || Gap > 50.) continue;
         if (Gap < LeaderGapM)
         {
             Leader = Other.Get();
@@ -245,7 +294,9 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
         const double DesiredGapM = 3. + SpeedMps * .75;
         FollowingSpeedLimitMps = FMath::Max(0., LeaderSpeedMps + (BumperGapM - DesiredGapM) * .6);
         if (BumperGapM < 2.) FollowingSpeedLimitMps = 0.;
-        if (!PassingVehicle.IsValid() && LeaderGapM < 45. && DesiredSpeedMps > LeaderSpeedMps + .7)
+        const double PassTriggerM=FMath::Lerp(30.,45.,static_cast<double>(Personality.OvertakeAggression));
+        if (!bEmergencyYield && !PassingVehicle.IsValid() && LeaderGapM < PassTriggerM
+            && DesiredSpeedMps > LeaderSpeedMps + .7)
         {
             const double CandidateA = BaseLaneOffsetCm <= 0. ? -MaxLaneOffsetCm : MaxLaneOffsetCm;
             const double CandidateB = -CandidateA;
@@ -274,6 +325,19 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
     const bool bAvoiding = FollowingSpeedLimitMps < DesiredSpeedMps || ObstacleClearanceM < SenseLengthM * .8;
     if (bAvoiding && !bWasAvoiding) ++AvoidanceCount;
     bWasAvoiding = bAvoiding;
+    if (bEmergencyYield)
+    {
+        DesiredLaneOffsetCm=EmergencyShoulderOffsetCm;
+        FollowingSpeedLimitMps=FMath::Min(FollowingSpeedLimitMps,8.0);
+    }
+    const int32 MistakeWindow=FMath::FloorToInt(ProgressM/120.);
+    if (Personality.PressureMistakeFrequency>0.f && bUnderPressure && MistakeWindow!=LastMistakeWindow)
+    {
+        LastMistakeWindow=MistakeWindow;
+        const uint32 Mixed=HashCombine(DriverSeed,GetTypeHash(MistakeWindow));
+        const float Roll=static_cast<float>(Mixed & 0x00ffffffu)/static_cast<float>(0x01000000u);
+        if (Roll<Personality.PressureMistakeFrequency*.16f) MistakeSeconds=1.15f;
+    }
 }
 
 void UADRaceDriverComponent::BeginRecovery(float ForwardSteering)
@@ -388,15 +452,21 @@ void UADRaceDriverComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     if (!FMath::IsFinite(ProgressM) || !FMath::IsFinite(RouteErrorM) || RouteErrorM > 25.)
     { RequestManagedRecovery(); return; }
     double DesiredSpeedMps = CruiseSpeedMps * DriverSpeedScale;
-    for (int32 Index = 0; Index < Definition->RoutePoints.Num(); ++Index)
+    // Open routes omit the terminal endpoint from RouteDistancesM because its
+    // distance is exactly RouteLengthM. Brake planning only has an "ahead of
+    // this distance" test for the remaining authored points.
+    for (int32 Index = 0; Index < Definition->RouteDistancesM.Num(); ++Index)
     {
-        const double AheadM = FMath::Fmod(Definition->RouteDistancesM[Index] - ProgressM + Definition->RouteLengthM,
-            Definition->RouteLengthM);
+        const double RawAhead=Definition->RouteDistancesM[Index]-ProgressM;
+        const double AheadM=Definition->Laps==0 ? RawAhead
+            : FMath::Fmod(RawAhead+Definition->RouteLengthM,Definition->RouteLengthM);
         if (AheadM < 120.)
         {
+            if (AheadM < 0.) continue;
             const double CornerSpeedMps = Definition->RoutePoints[Index].SpeedKmh / 3.6 * DriverSpeedScale;
             DesiredSpeedMps = FMath::Min(DesiredSpeedMps, FMath::Sqrt(CornerSpeedMps * CornerSpeedMps +
-                2. * BrakingDecelerationMps2 * FMath::Max(0., AheadM - 6.)));
+                2. * BrakingDecelerationMps2 * FMath::Max(0., AheadM - 6.
+                    - Personality.BrakingConservatism*18.)));
         }
     }
     SenseCountdown -= Dt;
@@ -422,6 +492,12 @@ void UADRaceDriverComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     const float Steering = static_cast<float>(FMath::Clamp(DesiredDegrees / FMath::Max(Limit, 1.), -1., 1.));
     TargetSpeedMps = FMath::Min(DesiredSpeedMps, FollowingSpeedLimitMps);
     if (bRunOut) TargetSpeedMps=FMath::Min(TargetSpeedMps,16.7); // At most 60 km/h after classification.
+    if (MistakeSeconds>0.f)
+    {
+        TargetSpeedMps*=.78;
+        MistakeSeconds=FMath::Max(0.f,MistakeSeconds-Dt);
+    }
+    if (bEmergencyYield) TargetSpeedMps=FMath::Min(TargetSpeedMps,8.);
     // The collision corridor supplies a separate emergency stopping envelope.
     // Brake and engine torque remain exactly those of the vehicle definition.
     if (ObstacleClearanceM < 99.)

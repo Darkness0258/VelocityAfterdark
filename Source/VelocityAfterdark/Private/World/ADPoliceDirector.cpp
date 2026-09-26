@@ -56,7 +56,7 @@ AADPoliceDirector::AADPoliceDirector()
 {
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.TickGroup = TG_PrePhysics;
-    Units.Reserve(3);
+    Units.Reserve(5);
 }
 
 void AADPoliceDirector::BeginPlay()
@@ -95,7 +95,7 @@ bool AADPoliceDirector::LoadSettings(FString& OutError)
         || !PoliceNumber(Object, TEXT("spawnMinDistanceM"), Candidate.SpawnMinDistanceM, 100., 300., OutError)
         || !PoliceNumber(Object, TEXT("spawnMaxDistanceM"), Candidate.SpawnMaxDistanceM, 100., 500., OutError)
         || !PoliceNumber(Object, TEXT("senseIntervalSeconds"), Candidate.SenseIntervalSeconds, .1, .5, OutError)
-        || !PoliceNumber(Object, TEXT("maxUnits"), MaxUnits, 2., 3., OutError)) return false;
+        || !PoliceNumber(Object, TEXT("maxUnits"), MaxUnits, 2., 5., OutError)) return false;
     if (Candidate.HeatThresholdSeconds[0] != 0. || Candidate.SpawnMaxDistanceM <= Candidate.SpawnMinDistanceM
         || MaxUnits != FMath::FloorToDouble(MaxUnits) || !Object->TryGetStringField(TEXT("routePath"), RoutePath)
         || !RoutePath.StartsWith(TEXT("Data/Races/")) || !RoutePath.EndsWith(TEXT(".json")) || RoutePath.Contains(TEXT(".."))
@@ -120,6 +120,9 @@ void AADPoliceDirector::RegisterPlayer(AADVehiclePawn* InPlayer)
     State = EADPoliceState::Patrol;
     StateSeconds = PursuitSeconds = MissingSightSeconds = ViolationSeconds = BustProgressSeconds = 0.;
     SpawnRetrySeconds = 0.;
+    RoadblockRetrySeconds=0.;
+    bRoadblockDispatched=false;
+    PITCount=0;
     SenseCountdown = 0.;
 }
 
@@ -132,6 +135,7 @@ void AADPoliceDirector::SetEnabled(bool bInEnabled)
         ClearUnits();
         Heat = 0;
         PursuitUnitsDispatched = 0;
+        bRoadblockDispatched=false;
         State = EADPoliceState::Patrol;
         StateSeconds = PursuitSeconds = MissingSightSeconds = ViolationSeconds = BustProgressSeconds = 0.;
     }
@@ -147,6 +151,8 @@ bool AADPoliceDirector::StartPursuit()
         && Mode->GetRaceManager()->GetState()!=EADRaceState::Idle) return false;
     while (GetUnitCount() < 2) if (!SpawnUnit()) return false;
     PursuitUnitsDispatched = GetUnitCount();
+    bRoadblockDispatched=false;
+    PITCount=0;
     Heat = 1;
     PursuitSeconds = MissingSightSeconds = BustProgressSeconds = 0.;
     LastSeenPosition = Player->GetActorLocation();
@@ -190,14 +196,14 @@ void AADPoliceDirector::RefreshDrivers()
         if (Unit.Driver->Initialize(Unit.Car.Get(), &Route, static_cast<float>(SpeedScale()), 300.f))
         {
             Unit.Driver->SetCompetitors(Competitors);
-            Unit.Driver->SetDriving(State != EADPoliceState::Busted);
+        Unit.Driver->SetDriving(!Unit.bRoadblock && State != EADPoliceState::Busted);
         }
         else RetireUnit(Unit);
     }
     SenseCountdown = 0.;
 }
 
-bool AADPoliceDirector::SpawnUnit()
+bool AADPoliceDirector::SpawnUnit(bool bRoadblock, int32 RoadblockSlot)
 {
     if (!Player.IsValid() || Units.Num() >= Settings.MaxUnits || !GetWorld()) return false;
     double RouteError = 0.;
@@ -209,9 +215,12 @@ bool AADPoliceDirector::SpawnUnit()
         // Existing units are never repositioned to keep up with the player.
         const double Distance = FMath::Lerp(Settings.SpawnMinDistanceM, Settings.SpawnMaxDistanceM,
             static_cast<double>(Attempt) / 11.);
-        const double Progress = PlayerProgress - Distance - Units.Num() * 35.;
+        const double Progress = bRoadblock
+            ? PlayerProgress + 105. + RoadblockSlot * 7.
+            : PlayerProgress - Distance - Units.Num() * 35.;
         const FVector2D Tangent = (Route.PointAtDistance(Progress + 1.) - Route.PointAtDistance(Progress - 1.)).GetSafeNormal();
-        const FVector2D Point = Route.PointAtDistance(Progress) + FVector2D(-Tangent.Y, Tangent.X) * 300.;
+        const double Lateral = bRoadblock ? (RoadblockSlot == 0 ? -520. : 520.) : 300.;
+        const FVector2D Point = Route.PointAtDistance(Progress) + FVector2D(-Tangent.Y, Tangent.X) * Lateral;
         FVector Position(Point.X, Point.Y, 90.);
         if (FVector::Dist2D(Position, PlayerPosition) < Settings.SpawnMinDistanceM * 100.) continue;
         bool bNearUnit = false;
@@ -223,7 +232,9 @@ bool AADPoliceDirector::SpawnUnit()
         if (!GetWorld()->LineTraceSingleByChannel(Ground, Position + FVector(0., 0., 400.), Position - FVector(0., 0., 500.), ECC_Visibility, Query)
             || Ground.ImpactNormal.Z < .8 || FMath::Abs(Ground.ImpactPoint.Z) > 150.) continue;
         Position.Z = Ground.ImpactPoint.Z + 90.;
-        const FQuat Rotation = FVector(Tangent.X, Tangent.Y, 0.).Rotation().Quaternion();
+        FRotator Facing=FVector(Tangent.X,Tangent.Y,0.).Rotation();
+        if (bRoadblock) Facing.Yaw+=RoadblockSlot==0 ? 38.f : -38.f;
+        const FQuat Rotation = Facing.Quaternion();
         if (GetWorld()->OverlapBlockingTestByChannel(Position, Rotation, ECC_Visibility,
             FCollisionShape::MakeBox(FVector(250., 125., 55.)), Query)) continue;
         FActorSpawnParameters Spawn;
@@ -241,6 +252,13 @@ bool AADPoliceDirector::SpawnUnit()
         FPoliceUnit Unit;
         Unit.Car = Car;
         Unit.Driver = Driver;
+        Unit.bRoadblock=bRoadblock;
+        if (bRoadblock)
+        {
+            Unit.RoadblockSeconds=0.f;
+            Unit.bDirectControl=false;
+            Driver->SetDriving(false);
+        }
         Car->OnRecoveryRequested.AddWeakLambda(this,[this](AADVehiclePawn* Disabled)
         {
             for (auto& Existing:Units)
@@ -260,6 +278,13 @@ int32 AADPoliceDirector::GetUnitCount() const
     int32 Count=0;
     for (const auto& Unit:Units)
         if (!Unit.bRetired && Unit.Car.IsValid() && Unit.Driver.IsValid()) ++Count;
+    return Count;
+}
+
+int32 AADPoliceDirector::GetRoadblockCount() const
+{
+    int32 Count=0;
+    for (const FPoliceUnit& Unit:Units) if (!Unit.bRetired && Unit.bRoadblock && Unit.Car.IsValid()) ++Count;
     return Count;
 }
 
@@ -388,10 +413,25 @@ void AADPoliceDirector::DriveUnit(FPoliceUnit& Unit, int32 Index, float DeltaSec
     if (Unit.bRetired || !Unit.Car.IsValid() || !Unit.Driver.IsValid() || !Player.IsValid()) return;
     auto* Car = Unit.Car.Get();
     auto* Physics = Car->GetPhysics();
+    Unit.PITCooldownSeconds=FMath::Max(0.f,Unit.PITCooldownSeconds-DeltaSeconds);
     const bool bRed = FMath::Fmod(GetWorld()->GetTimeSeconds() * 4. + Index, 2.) < 1.;
     if (Unit.RedLight.IsValid()) Unit.RedLight->SetIntensity(IsActive() && bRed ? 2000.f : 0.f);
     if (Unit.BlueLight.IsValid()) Unit.BlueLight->SetIntensity(IsActive() && !bRed ? 2000.f : 0.f);
     if (State == EADPoliceState::Busted) { Physics->SetControls(0.f, 1.f, 0.f, true); return; }
+    if (Unit.bRoadblock)
+    {
+        Unit.RoadblockSeconds+=DeltaSeconds;
+        const FVector LocalPlayer=Car->GetActorTransform().InverseTransformPosition(Player->GetActorLocation());
+        if (Unit.RoadblockSeconds>=24.f || (LocalPlayer.X<0.f && LocalPlayer.Size2D()<3000.f))
+        {
+            Unit.bRoadblock=false;
+            Unit.Driver->ResetDriver();
+            Unit.Driver->SetDriving(true);
+            return;
+        }
+        Physics->SetControls(0.f,1.f,0.f,false);
+        return;
+    }
     const FVector Position = Car->GetActorLocation();
     const FVector ToPlayer = LastSeenPosition - Position;
     const double DistanceM = ToPlayer.Size2D() * .01;
@@ -431,6 +471,34 @@ void AADPoliceDirector::DriveUnit(FPoliceUnit& Unit, int32 Index, float DeltaSec
     Physics->SetControls(static_cast<float>(FMath::Clamp(SpeedError * .3, 0., 1.)),
         static_cast<float>(FMath::Clamp(-SpeedError * .25, 0., 1.)),
         static_cast<float>(FMath::Clamp(DesiredSteerDegrees / FMath::Max(1., SteerLimit), -1., 1.)), false);
+
+    // A controlled rear-quarter tap gives the player a readable PIT counterplay
+    // window. It never teleports either car and cannot repeat every frame.
+    if (Heat>=3 && Unit.PITCooldownSeconds<=0.f)
+    {
+        const FVector PlayerLocal=Player->GetActorTransform().InverseTransformPosition(Car->GetActorLocation());
+        const FVector RelativeVelocity=Player->GetActorTransform().InverseTransformVector(
+            Car->GetVelocity()-Player->GetVelocity());
+        const double PlayerSpeed=Player->GetVelocity().Size2D();
+        const bool bAtRearQuarter=PlayerLocal.X>=-520. && PlayerLocal.X<=-150.
+            && FMath::Abs(PlayerLocal.Y)>=85. && FMath::Abs(PlayerLocal.Y)<=260.;
+        const bool bMatchedSpeed=RelativeVelocity.Size2D()<=1400.
+            && FVector::DotProduct(Car->GetActorForwardVector().GetSafeNormal2D(),
+                Player->GetActorForwardVector().GetSafeNormal2D())>.75;
+        if (bAtRearQuarter && bMatchedSpeed && PlayerSpeed>1200.)
+        {
+            if (UPrimitiveComponent* PlayerBody=Cast<UPrimitiveComponent>(Player->GetRootComponent());
+                PlayerBody && PlayerBody->IsSimulatingPhysics())
+            {
+                const float Side=FMath::Sign(PlayerLocal.Y);
+                const FVector Contact=Player->GetActorLocation()-Player->GetActorForwardVector()*120.f
+                    +Player->GetActorRightVector()*Side*90.f;
+                PlayerBody->AddImpulseAtLocation(-Player->GetActorRightVector()*52000.f,Contact);
+                Unit.PITCooldownSeconds=5.f;
+                ++PITCount;
+            }
+        }
+    }
 }
 
 void AADPoliceDirector::Tick(float DeltaSeconds)
@@ -457,7 +525,7 @@ void AADPoliceDirector::Tick(float DeltaSeconds)
     RemoveRetiredUnits(DeltaSeconds);
     StateSeconds += Step;
     SpawnRetrySeconds -= Step;
-    const int32 DesiredUnits = Heat >= 3 ? Settings.MaxUnits : 2;
+    const int32 DesiredUnits = Heat >= 3 ? FMath::Min(3,Settings.MaxUnits-2) : 2;
     const bool bPatrolNeedsUnits=State==EADPoliceState::Patrol && GetUnitCount()<2;
     const bool bHeatNeedsUnit=(State==EADPoliceState::Pursuit || State==EADPoliceState::Search)
         && PursuitUnitsDispatched<DesiredUnits;
@@ -465,6 +533,27 @@ void AADPoliceDirector::Tick(float DeltaSeconds)
     {
         if (SpawnUnit() && bHeatNeedsUnit) ++PursuitUnitsDispatched;
         SpawnRetrySeconds = 3.;
+    }
+    RoadblockRetrySeconds-=Step;
+    if (State==EADPoliceState::Pursuit && Heat>=4 && !bRoadblockDispatched
+        && RoadblockRetrySeconds<=0. && Units.Num()+2<=Settings.MaxUnits)
+    {
+        if (SpawnUnit(true,0))
+        {
+            if (SpawnUnit(true,1))
+            {
+                bRoadblockDispatched=true;
+                UE_LOG(LogADPolice,Display,TEXT("Roadblock deployed ahead on validated pursuit route."));
+            }
+            else
+            {
+                for (FPoliceUnit& Unit:Units)
+                    if (Unit.bRoadblock) { Unit.bRoadblock=false; Unit.Driver->ResetDriver(); Unit.Driver->SetDriving(true); }
+                RoadblockRetrySeconds=10.;
+                RefreshDrivers();
+            }
+        }
+        else RoadblockRetrySeconds=10.;
     }
     SenseCountdown -= Step;
     if (SenseCountdown <= 0.) { Sense(); SenseCountdown = Settings.SenseIntervalSeconds; }
@@ -505,6 +594,7 @@ void AADPoliceDirector::Tick(float DeltaSeconds)
     {
         MissingSightSeconds = PursuitSeconds = BustProgressSeconds = 0.;
         PursuitUnitsDispatched = 0;
+        bRoadblockDispatched=false;
         EnterState(EADPoliceState::Patrol);
     }
     for (int32 Index = 0; Index < Units.Num(); ++Index) DriveUnit(Units[Index], Index, DeltaSeconds);

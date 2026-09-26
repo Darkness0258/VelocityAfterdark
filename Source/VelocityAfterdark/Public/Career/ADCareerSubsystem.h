@@ -5,6 +5,7 @@
 #include "ADCareerSubsystem.generated.h"
 
 struct FADGarageProfile;
+struct FADRaceDefinition;
 
 /** Authored challenge data. Chapter order is the unlock order; RaceId identifies a real race definition. */
 struct VELOCITYAFTERDARK_API FADCareerChapter
@@ -55,6 +56,10 @@ public:
     // Null means the series is finished, unavailable, or the saved completion order is invalid.
     const FADCareerChapter* GetActiveChapter(const FADGarageProfile& Profile) const;
     FString GetRankName(int64 Reputation) const;
+    FString ComposeBriefing(const FADGarageProfile& Profile, const FADCareerChapter& Chapter,
+        const FADRaceDefinition& Race) const;
+    FString ComposeVictoryLine(const FADGarageProfile& Profile, const FADCareerChapter& Chapter,
+        const FADRaceDefinition& Race) const;
 
     // Only the current chapter can pay out. A completed race in places 2-4 pays a finish stipend;
     // only first place grants REP and advances. DNF must never call this with a classified place.

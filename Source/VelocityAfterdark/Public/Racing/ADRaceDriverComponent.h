@@ -3,12 +3,11 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "CollisionQueryParams.h"
+#include "Racing/ADRaceDefinition.h"
 #include "ADRaceDriverComponent.generated.h"
 
 class AADVehiclePawn;
 class UADVehiclePhysicsComponent;
-struct FADRaceDefinition;
-
 /** Route-following racer using the same control inputs and physical limits as the player. */
 UCLASS(ClassGroup=(Racing), meta=(BlueprintSpawnableComponent))
 class VELOCITYAFTERDARK_API UADRaceDriverComponent : public UActorComponent
@@ -24,6 +23,9 @@ public:
     // The manager owns an immutable definition for the lifetime of this driver.
     bool Initialize(AADVehiclePawn* Car, const FADRaceDefinition* Route,
         float SpeedScale, float LaneOffsetCm);
+    bool SetPersonality(const FString& StableDriverId, const FADDriverPersonality& Personality);
+    void SetEmergencyYield(bool bYield, float ShoulderOffsetCm = 650.f);
+    bool IsEmergencyYielding() const { return bEmergencyYield; }
     void SetCompetitors(const TArray<AADVehiclePawn*>& Cars);
     void SetDriving(bool bEnabled);
     void BeginRunOut(double DistanceM);
@@ -53,6 +55,8 @@ private:
     TArray<TWeakObjectPtr<AADVehiclePawn>> Competitors;
     TWeakObjectPtr<AADVehiclePawn> PassingVehicle;
     const FADRaceDefinition* Definition = nullptr;
+    FString DriverIdentity;
+    FADDriverPersonality Personality;
     FCollisionQueryParams ObstacleQuery;
     FVector ReverseStart = FVector::ZeroVector;
     FVector RunOutLastPosition = FVector::ZeroVector;
@@ -78,11 +82,17 @@ private:
     float HealthyDrivingSeconds = 0.f;
     float RecoverySeconds = 0.f;
     float RecoverySteering = 0.f;
+    float MistakeSeconds = 0.f;
+    float EmergencyShoulderOffsetCm = 650.f;
     int32 ConsecutiveRecoveryAttempts = 0;
     int32 RecoveryAttemptCount = 0;
     int32 AvoidanceCount = 0;
     int32 OvertakeCount = 0;
+    int32 LastMistakeWindow = INDEX_NONE;
+    uint32 DriverSeed = 0;
     bool bDriving = false;
     bool bNeedsRecovery = false;
     bool bWasAvoiding = false;
+    bool bUnderPressure = false;
+    bool bEmergencyYield = false;
 };

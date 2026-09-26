@@ -3,7 +3,6 @@ param(
     [ValidateSet('Check', 'Build', 'Bootstrap', 'UpgradeVisuals', 'Open', 'Test', 'Render', 'Package')]
     [string]$Action = 'Check',
     [string]$EngineRoot = $env:UE_ROOT,
-    [ValidateSet('Afterdark.Runtime.LivingWorld','Afterdark.Runtime.RegionalRace')]
     [string]$TestFilter
 )
 $ErrorActionPreference = 'Stop'
@@ -70,6 +69,12 @@ switch ($Action) {
         if (-not (Select-String -LiteralPath $visualLog -SimpleMatch 'Python script executed successfully' -Quiet)) {
             throw 'UE did not report a successful PBR material import.'
         }
+        $polyHavenUpgrade = Join-Path $PSScriptRoot 'Editor\import_polyhaven_asphalt.py'
+        Invoke-Logged $editorCmd @($projectFile,'-run=pythonscript',"-script=$polyHavenUpgrade",'-unattended','-nosplash','-NullRHI','-UTF8Output') 'polyhaven-asphalt.log'
+        $polyHavenLog = Join-Path $artifactRoot 'polyhaven-asphalt.log'
+        if (-not (Select-String -LiteralPath $polyHavenLog -SimpleMatch 'Python script executed successfully' -Quiet)) {
+            throw 'UE did not report a successful Poly Haven asphalt import.'
+        }
         $generatedContent = Join-Path $projectRoot 'Content\Velocity\Materials'
         foreach ($asset in @('M_Asphalt_Smooth.uasset','M_Concrete_PBR.uasset','M_Building_PBR.uasset',
                 'Generated\T_Asphalt_Surface_V2.uasset','Generated\T_Asphalt_Normal_V2.uasset',
@@ -79,7 +84,16 @@ switch ($Action) {
                 throw "PBR material build did not create $asset"
             }
         }
-        Write-Host 'AFTERDARK_VISUAL_ASSETS_OK: three district materials and six source-built PBR textures.'
+        $asphaltContent = Join-Path $projectRoot 'Content\Velocity'
+        foreach ($asset in @('External\AsphaltTrack\T_AsphaltTrack_Diffuse_2K.uasset',
+                'External\AsphaltTrack\T_AsphaltTrack_NormalDX_2K.uasset',
+                'External\AsphaltTrack\T_AsphaltTrack_Roughness_2K.uasset',
+                'Materials\M_Asphalt_PolyHaven.uasset')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $asphaltContent $asset))) {
+                throw "Poly Haven asphalt import did not create $asset"
+            }
+        }
+        Write-Host 'AFTERDARK_VISUAL_ASSETS_OK: wettable Poly Haven asphalt, three district materials and nine PBR textures.'
     }
     'Open' {
         $mapFile = Join-Path $projectRoot 'Content\Velocity\Maps\L_Dockside.umap'
@@ -112,7 +126,7 @@ switch ($Action) {
             'Afterdark.Runtime.GarageVehicleSwitch', 'Afterdark.Input.Rebinding',
             'Afterdark.Settings.DraftApplyCancel', 'Afterdark.Settings.CanvasScale',
             'Afterdark.Runtime.LivingWorld', 'Afterdark.Runtime.PhotoReplay')
-        foreach ($route in @('Foundry', 'IronQuay', 'NightSurvey', 'Northfield', 'GlassCoast', 'Sable', 'AfterdarkFinal')) {
+        foreach ($route in @('Foundry', 'IronQuay', 'NightSurvey', 'Northfield', 'GlassCoast', 'Sable', 'AfterdarkFinal', 'AfterdarkSprint')) {
             $expectedTests += "Afterdark.Runtime.RegionalRace.$route"
         }
         if ($TestFilter) {
@@ -179,6 +193,10 @@ switch ($Action) {
             throw "Cooked package omitted the imported CC0 background vehicle: $requiredCityCar"
         }
         $requiredVisualAssets = @(
+            'VelocityAfterdark/Content/Velocity/Materials/M_Asphalt_PolyHaven.uasset',
+            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Diffuse_2K.uasset',
+            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_NormalDX_2K.uasset',
+            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Roughness_2K.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/M_Asphalt_Smooth.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/M_Building_PBR.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/M_Concrete_PBR.uasset',
@@ -193,7 +211,10 @@ switch ($Action) {
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Surface_V2.ubulk',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Normal_V2.ubulk',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Normal_V2.ubulk',
-            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Normal_V2.ubulk'
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Normal_V2.ubulk',
+            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Diffuse_2K.ubulk',
+            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_NormalDX_2K.ubulk',
+            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Roughness_2K.ubulk'
         )
         foreach ($visualAsset in $requiredVisualAssets) {
             if (-not (Select-String -LiteralPath $manifest -SimpleMatch $visualAsset -Quiet)) {
@@ -201,6 +222,6 @@ switch ($Action) {
             }
         }
         & (Join-Path $PSScriptRoot 'Record-BuildProof.ps1')
-        Write-Host 'AFTERDARK_PACKAGE_OK: Windows archive, runtime JSON, PBR district materials and imported CC0 city car staged. Runtime acceptance is separate from packaging.'
+        Write-Host 'AFTERDARK_PACKAGE_OK: Windows archive, runtime JSON, Poly Haven road PBR, district materials and CC0 city car staged. Runtime acceptance is separate from packaging.'
     }
 }

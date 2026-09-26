@@ -44,6 +44,7 @@ public:
 private:
     bool Enter(EADCinematicMode Desired);
     void UpdatePhoto(float RealDelta);
+    void ApplyPhotoLook();
     void UpdateReplay(float RealDelta);
     void Record(float DeltaSeconds);
     bool BuildPlayback();
@@ -60,6 +61,9 @@ private:
     float RecordAccumulator=0.f;
     float PhotoBaseExposure=0.f;
     float PhotoExposureOffset=0.f;
+    float PhotoFocusDistanceCm=1500.f;
+    float PhotoFStop=8.f;
+    int32 PhotoFilterIndex=0;
     int32 RingHead=0;
     int32 CameraIndex=0;
     int32 CaptureHideFrames=0;

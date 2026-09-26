@@ -295,7 +295,13 @@
         0.075
       ],
       "speedScale": 1.0,
-      "laneOffsetCm": 300
+      "laneOffsetCm": 300,
+      "id": "rhea_vale",
+      "personality": {
+        "overtakeAggression": 0.86,
+        "brakingConservatism": 0.62,
+        "pressureMistakeFrequency": 0.18
+      }
     },
     {
       "name": "Mako Reyes",
@@ -305,7 +311,13 @@
         0.78
       ],
       "speedScale": 0.97,
-      "laneOffsetCm": -300
+      "laneOffsetCm": -300,
+      "id": "mako_reyes",
+      "personality": {
+        "overtakeAggression": 0.68,
+        "brakingConservatism": 0.32,
+        "pressureMistakeFrequency": 0.28
+      }
     },
     {
       "name": "Tess Nouri",
@@ -315,7 +327,13 @@
         0.85
       ],
       "speedScale": 0.94,
-      "laneOffsetCm": 0
+      "laneOffsetCm": 0,
+      "id": "tess_nouri",
+      "personality": {
+        "overtakeAggression": 0.42,
+        "brakingConservatism": 0.78,
+        "pressureMistakeFrequency": 0.08
+      }
     }
   ],
   "difficultySpeedScales": [

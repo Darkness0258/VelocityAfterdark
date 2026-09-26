@@ -170,6 +170,7 @@ bool AADRaceManager::StartRaceById(AADVehiclePawn* Player,const FString& RaceId,
         FADRacerState Racer;
         Racer.Car=Car;
         Racer.Name=Index==0 ? TEXT("YOU") : Definition.Opponents[Index-1].Name;
+        Racer.RivalId=Index==0 ? FString() : Definition.Opponents[Index-1].Id;
         Racer.Color=Index==0 ? FLinearColor(.53f,.92f,.77f) : Definition.Opponents[Index-1].Color;
         Racer.Place=Index+1;
         Racer.Progress.Reset(ScoringGates.Num(),Definition.Laps);
@@ -193,6 +194,12 @@ bool AADRaceManager::StartRaceById(AADVehiclePawn* Player,const FString& RaceId,
             if (!Driver->Initialize(Car,&Definition,static_cast<float>(Definition.DifficultySpeedScales[Difficulty])*Opponent.SpeedScale,Opponent.LaneOffsetCm))
             {
                 LoadError=TEXT("An opponent driver could not initialize.");
+                LeaveRace();
+                return false;
+            }
+            if (!Driver->SetPersonality(Opponent.Id,Opponent.Personality))
+            {
+                LoadError=TEXT("An opponent personality is invalid.");
                 LeaveRace();
                 return false;
             }
@@ -222,9 +229,15 @@ bool AADRaceManager::StartCareerRace(AADVehiclePawn* Player)
     const auto* Chapter=Career->GetActiveChapter(Ownership->GetProfile());
     if (!Chapter) return false;
     const FString Id=Chapter->Id;
-    const FString Briefing=Chapter->Briefing;
-    if (!StartRaceById(Player,Chapter->RaceId,Chapter->Difficulty)) return false;
-    ActiveChapterId=Id;
+    const FString ChapterId=Chapter->Id;
+    const FString RaceId=Chapter->RaceId;
+    const FADCareerChapter ChapterCopy=*Chapter;
+    const FADRaceDefinition* Race=Catalog.Find(RaceId);
+    if (!Race) return false;
+    const FADRaceDefinition RaceCopy=*Race;
+    const FString Briefing=Career->ComposeBriefing(Ownership->GetProfile(),ChapterCopy,RaceCopy);
+    if (!StartRaceById(Player,RaceId,Chapter->Difficulty)) return false;
+    ActiveChapterId=ChapterId;
     CareerMessage=Briefing;
     return true;
 }
@@ -241,13 +254,28 @@ bool AADRaceManager::RetryCareerReward()
     bRewardAttempted=true;
     auto* Ownership=GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
     FString Error;
-    if (!Ownership || !Ownership->CommitRaceResult(RaceReceiptId,ActiveChapterId,Racers[0].Place,Error))
+    TArray<FADRivalRaceResult> RivalResults;
+    RivalResults.Reserve(FMath::Max(0,Racers.Num()-1));
+    for (int32 Index=1;Index<Racers.Num();++Index)
+    {
+        if (Racers[Index].RivalId.IsEmpty())
+        {
+            CareerMessage=TEXT("REWARD NOT SAVED. A rival is missing its stable identity.");
+            return false;
+        }
+        RivalResults.Add({Racers[Index].RivalId,Racers[Index].Place});
+    }
+    if (!Ownership || !Ownership->CommitRaceResult(RaceReceiptId,ActiveChapterId,Racers[0].Place,RivalResults,Error))
     {
         CareerMessage=TEXT("REWARD NOT SAVED. Enter retries: ")+Error;
         return false;
     }
     bRewardCommitted=true;
-    CareerMessage=Ownership->GetStatus();
+    const auto* Career=GetGameInstance()->GetSubsystem<UADCareerSubsystem>();
+    const auto* Chapter=Career ? Career->GetChapters().FindByPredicate(
+        [this](const FADCareerChapter& Item){ return Item.Id==ActiveChapterId; }) : nullptr;
+    const auto* Race=Catalog.Find(Definition.Id);
+    CareerMessage=Chapter && Race ? Career->ComposeVictoryLine(Ownership->GetProfile(),*Chapter,*Race) : Ownership->GetStatus();
     return true;
 }
 
@@ -324,7 +352,12 @@ void AADRaceManager::Tick(float DeltaSeconds)
         }
         if (Event==ADRaceRules::Event::Finished)
         {
-            if (Racer.Driver.IsValid()) Racer.Driver->BeginRunOut(FMath::Max(60.,12.*Racers.Num()));
+            if (Definition.Laps==0)
+            {
+                if (Racer.Driver.IsValid()) Racer.Driver->SetDriving(false);
+                Racer.Car->GetPhysics()->SetControls(0.f,1.f,0.f,false);
+            }
+            else if (Racer.Driver.IsValid()) Racer.Driver->BeginRunOut(FMath::Max(60.,12.*Racers.Num()));
             else Racer.Car->GetPhysics()->SetControls(0.f,1.f,0.f,false);
             UE_LOG(LogADRace,Display,TEXT("Finished: %s, %.3fs + %.1fs penalty."),*Racer.Name,Racer.Progress.FinishSeconds,Racer.PenaltySeconds);
         }
@@ -359,9 +392,10 @@ void AADRaceManager::UpdateClassification()
         Racer.RankedDistanceM=Racer.Progress.CompletedLaps*Definition.RouteLengthM;
         if (!Racer.Car.IsValid() || !Racer.Progress.Started || Racer.Progress.Finished) continue;
         const int32 Next=Racer.Progress.NextCheckpoint;
-        const int32 Previous=(Next+Definition.Checkpoints.Num()-1)%Definition.Checkpoints.Num();
+        const bool bPointToPoint=Definition.Laps==0;
+        const int32 Previous=bPointToPoint ? Next-1 : (Next+Definition.Checkpoints.Num()-1)%Definition.Checkpoints.Num();
         const double From=Definition.Checkpoints[Previous].DistanceM;
-        const double To=Next==0 ? Definition.RouteLengthM : Definition.Checkpoints[Next].DistanceM;
+        const double To=(!bPointToPoint && Next==0) ? Definition.RouteLengthM : Definition.Checkpoints[Next].DistanceM;
         double Error=0.;
         double Distance=Definition.ClosestDistanceM(Racer.Car->GetActorLocation(),Error);
         const FVector2D Direction=(Definition.PointAtDistance(Distance+2.)-Definition.PointAtDistance(Distance)).GetSafeNormal();
@@ -369,7 +403,7 @@ void AADRaceManager::UpdateClassification()
         Racer.bWrongWay=Velocity.Size()>500. && FVector::DotProduct(Velocity.GetSafeNormal(),FVector(Direction.X,Direction.Y,0))<-.25;
         // Only position within the currently unlocked route leg contributes to
         // ranking. Crossing another district road cannot jump the race order.
-        if (Next==0 && Distance<1.) Distance=Definition.RouteLengthM;
+        if (!bPointToPoint && Next==0 && Distance<1.) Distance=Definition.RouteLengthM;
         Racer.RankedDistanceM+=From+(Distance>=From && Distance<=To && Error<15. ? Distance-From : 0.);
     }
     for (int32 Index=0;Index<SortOrder.Num();++Index) SortOrder[Index]=Index;

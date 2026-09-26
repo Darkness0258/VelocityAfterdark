@@ -390,7 +390,13 @@
         0.075
       ],
       "speedScale": 1.0,
-      "laneOffsetCm": 300
+      "laneOffsetCm": 300,
+      "id": "soren_pell",
+      "personality": {
+        "overtakeAggression": 0.89,
+        "brakingConservatism": 0.35,
+        "pressureMistakeFrequency": 0.22
+      }
     },
     {
       "name": "Rhea Vale",
@@ -400,7 +406,13 @@
         0.78
       ],
       "speedScale": 0.97,
-      "laneOffsetCm": -300
+      "laneOffsetCm": -300,
+      "id": "rhea_vale",
+      "personality": {
+        "overtakeAggression": 0.86,
+        "brakingConservatism": 0.62,
+        "pressureMistakeFrequency": 0.18
+      }
     },
     {
       "name": "Mara Ko",
@@ -410,7 +422,13 @@
         0.85
       ],
       "speedScale": 0.94,
-      "laneOffsetCm": 0
+      "laneOffsetCm": 0,
+      "id": "mara_ko",
+      "personality": {
+        "overtakeAggression": 0.46,
+        "brakingConservatism": 0.88,
+        "pressureMistakeFrequency": 0.06
+      }
     }
   ]
 }

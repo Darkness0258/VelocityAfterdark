@@ -82,7 +82,7 @@ public:
     bool Reset(int InGateCount, int InLapCount)
     {
         *this = Progress();
-        if (InGateCount < 2 || InGateCount > 256 || InLapCount < 1 || InLapCount > 99) return false;
+        if (InGateCount < 2 || InGateCount > 256 || InLapCount < 0 || InLapCount > 99) return false;
         GateCount = InGateCount;
         LapCount = InLapCount;
         return true;
@@ -147,6 +147,17 @@ public:
         LastSplitSeconds = CrossingSeconds - LapStartSeconds;
         if (NextCheckpoint != 0)
         {
+            if (LapCount == 0)
+            {
+                if (NextCheckpoint == GateCount - 1)
+                {
+                    Finished = true;
+                    FinishSeconds = CrossingSeconds;
+                    return Event::Finished;
+                }
+                ++NextCheckpoint;
+                return Event::Checkpoint;
+            }
             NextCheckpoint = (NextCheckpoint + 1) % GateCount;
             return Event::Checkpoint;
         }

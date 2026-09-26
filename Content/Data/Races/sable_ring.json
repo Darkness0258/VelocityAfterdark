@@ -430,7 +430,13 @@
         0.075
       ],
       "speedScale": 1.0,
-      "laneOffsetCm": 300
+      "laneOffsetCm": 300,
+      "id": "inez_vale",
+      "personality": {
+        "overtakeAggression": 0.54,
+        "brakingConservatism": 0.81,
+        "pressureMistakeFrequency": 0.09
+      }
     },
     {
       "name": "Emil Rook",
@@ -440,7 +446,13 @@
         0.78
       ],
       "speedScale": 0.97,
-      "laneOffsetCm": -300
+      "laneOffsetCm": -300,
+      "id": "emil_rook",
+      "personality": {
+        "overtakeAggression": 0.77,
+        "brakingConservatism": 0.62,
+        "pressureMistakeFrequency": 0.12
+      }
     },
     {
       "name": "Leena Saye",
@@ -450,7 +462,13 @@
         0.85
       ],
       "speedScale": 0.94,
-      "laneOffsetCm": 0
+      "laneOffsetCm": 0,
+      "id": "leena_saye",
+      "personality": {
+        "overtakeAggression": 0.73,
+        "brakingConservatism": 0.42,
+        "pressureMistakeFrequency": 0.17
+      }
     }
   ]
 }

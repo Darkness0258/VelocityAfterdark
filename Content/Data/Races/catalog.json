@@ -32,6 +32,10 @@
     {
       "id": "afterdark_final_v1",
       "file": "afterdark_final.json"
+    },
+    {
+      "id": "afterdark_sprint_v1",
+      "file": "afterdark_sprint.json"
     }
   ]
 }

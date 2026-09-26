@@ -33,6 +33,19 @@ bool String(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString& Ou
     return true;
 }
 
+bool Identifier(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString& Out, FString& Error)
+{
+    if (!String(Object, Key, Out, Error) || Out != Out.ToLower() || Out.Len() > 48) return false;
+    for (const TCHAR Character : Out)
+        if ((Character < TEXT('a') || Character > TEXT('z'))
+            && (Character < TEXT('0') || Character > TEXT('9')) && Character != TEXT('_'))
+        {
+            Error = FString::Printf(TEXT("'%s' must be a stable lowercase identifier."), Key);
+            return false;
+        }
+    return true;
+}
+
 bool Array(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key,
     const TArray<TSharedPtr<FJsonValue>>*& Out, int32 Minimum, int32 Maximum, FString& Error)
 {
@@ -75,8 +88,24 @@ bool Vector(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FVector& Ou
 
 FVector2D FADRaceDefinition::PointAtDistance(double DistanceM) const
 {
-    if (RoutePoints.Num() < 2 || RouteDistancesM.Num() != RoutePoints.Num()
+    const int32 ExpectedDistanceCount = Laps == 0 ? RoutePoints.Num() - 1 : RoutePoints.Num();
+    if (RoutePoints.Num() < 2 || RouteDistancesM.Num() != ExpectedDistanceCount
         || !FMath::IsFinite(DistanceM) || RouteLengthM <= 0.0) return FVector2D::ZeroVector;
+    if (Laps == 0)
+    {
+        const double Clamped = FMath::Clamp(DistanceM, 0.0, RouteLengthM);
+        for (int32 I = RoutePoints.Num() - 2; I >= 0; --I)
+        {
+            if (Clamped < RouteDistancesM[I]) continue;
+            const int32 Next = I + 1;
+            const double EndDistance = Next == RoutePoints.Num() - 1 ? RouteLengthM : RouteDistancesM[Next];
+            const double Interval = EndDistance - RouteDistancesM[I];
+            if (Interval <= UE_SMALL_NUMBER) return RoutePoints[I].Position;
+            return FMath::Lerp(RoutePoints[I].Position, RoutePoints[Next].Position,
+                FMath::Clamp((Clamped - RouteDistancesM[I]) / Interval, 0.0, 1.0));
+        }
+        return RoutePoints[0].Position;
+    }
     const double Wrapped = FMath::Fmod(FMath::Fmod(DistanceM, RouteLengthM) + RouteLengthM, RouteLengthM);
     for (int32 I = RoutePoints.Num() - 1; I >= 0; --I)
     {
@@ -94,10 +123,12 @@ FVector2D FADRaceDefinition::PointAtDistance(double DistanceM) const
 double FADRaceDefinition::ClosestDistanceM(const FVector& Position, double& OutErrorM) const
 {
     OutErrorM = TNumericLimits<double>::Max();
-    if (RoutePoints.Num() < 2 || RouteDistancesM.Num() != RoutePoints.Num() || Position.ContainsNaN()) return 0.0;
+    const int32 ExpectedDistanceCount = Laps == 0 ? RoutePoints.Num() - 1 : RoutePoints.Num();
+    if (RoutePoints.Num() < 2 || RouteDistancesM.Num() != ExpectedDistanceCount || Position.ContainsNaN()) return 0.0;
     const FVector2D Point(Position.X, Position.Y);
     double Closest = 0.0;
-    for (int32 I = 0; I < RoutePoints.Num(); ++I)
+    const int32 SegmentCount = Laps == 0 ? RoutePoints.Num() - 1 : RoutePoints.Num();
+    for (int32 I = 0; I < SegmentCount; ++I)
     {
         const FVector2D Start = RoutePoints[I].Position;
         const FVector2D Delta = RoutePoints[(I + 1) % RoutePoints.Num()].Position - Start;
@@ -111,7 +142,11 @@ double FADRaceDefinition::ClosestDistanceM(const FVector& Position, double& OutE
             Closest = RouteDistancesM[I] + FMath::Sqrt(LengthSquared) * Alpha * 0.01;
         }
     }
-    return RouteLengthM > 0.0 && Closest >= RouteLengthM ? 0.0 : Closest;
+    // The final segment ends at the first route point. Floating-point length
+    // accumulation can leave its projected endpoint a few ulps below the
+    // total, so an exact >= RouteLengthM check misses the closed-loop seam.
+    if (Laps > 0 && RouteLengthM > 0.0 && Closest >= RouteLengthM - 0.001) return 0.0;
+    return Closest;
 }
 
 bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
@@ -140,7 +175,7 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
     double Schema = 0.0, LapsValue = 0.0;
     if (!Number(Root, TEXT("schemaVersion"), Schema, 1, 1, Error)
         || !String(Root, TEXT("id"), Candidate.Id, Error) || !String(Root, TEXT("name"), Candidate.Name, Error)
-        || !Number(Root, TEXT("laps"), LapsValue, 1, 99, Error)
+        || !Number(Root, TEXT("laps"), LapsValue, 0, 99, Error)
         || !Number(Root, TEXT("countdownSeconds"), Candidate.CountdownSeconds, 1, 10, Error)
         || !Number(Root, TEXT("timeoutSeconds"), Candidate.TimeoutSeconds, 60, 7200, Error)
         || !Number(Root, TEXT("recoveryPenaltySeconds"), Candidate.RecoveryPenaltySeconds, 1, 60, Error)) return false;
@@ -157,9 +192,10 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         { Error = TEXT("routePoints must remain within 2.5 km of the origin and use speed limits of 20-140 km/h."); return false; }
         Candidate.RoutePoints.Add({FVector2D(Values[0], Values[1]), Values[2]});
     }
-    for (int32 I = 0; I < Candidate.RoutePoints.Num(); ++I)
+    const int32 RouteSegmentCount = Candidate.Laps == 0 ? Candidate.RoutePoints.Num() - 1 : Candidate.RoutePoints.Num();
+    for (int32 I = 0; I < RouteSegmentCount; ++I)
     {
-        const int32 Next = (I + 1) % Candidate.RoutePoints.Num();
+        const int32 Next = Candidate.Laps == 0 ? I + 1 : (I + 1) % Candidate.RoutePoints.Num();
         const double SegmentM = (Candidate.RoutePoints[Next].Position - Candidate.RoutePoints[I].Position).Size() * 0.01;
         if (SegmentM < 1 || SegmentM > 1000)
         { Error = FString::Printf(TEXT("Route segment %d must be 1-1000 metres long."), I); return false; }
@@ -169,10 +205,10 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
     if (Candidate.RouteLengthM < 500 || Candidate.RouteLengthM > 20000)
     { Error = TEXT("Race loop must be 500-20000 metres long."); return false; }
     // A time limit below theoretical full-throttle travel would make valid content impossible to finish.
-    if (Candidate.TimeoutSeconds < Candidate.RouteLengthM * Candidate.Laps / (140.0 / 3.6))
+    if (Candidate.TimeoutSeconds < Candidate.RouteLengthM * FMath::Max(Candidate.Laps, 1) / (140.0 / 3.6))
     { Error = TEXT("Race timeout is shorter than the theoretical minimum completion time."); return false; }
 
-    if (!Array(Root, TEXT("checkpoints"), Items, 4, 256, Error)) return false;
+    if (!Array(Root, TEXT("checkpoints"), Items, Candidate.Laps == 0 ? 2 : 4, 256, Error)) return false;
     double PreviousDistanceM = -1.0;
     for (int32 I = 0; I < Items->Num(); ++I)
     {
@@ -189,13 +225,20 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         if (Gate.Location.Z < 30 || Gate.Location.Z > 200 || FMath::Abs(Gate.Forward.Z) > 0.001
             || FMath::Abs(Gate.Forward.SizeSquared() - 1.0) > 0.001)
         { Error = FString::Printf(TEXT("Checkpoint %d requires a 30-200 cm height and a unit horizontal forward vector."), I); return false; }
+        const bool bSprintFinish = Candidate.Laps == 0 && I == Items->Num() - 1
+            && FMath::IsNearlyEqual(Gate.DistanceM, Candidate.RouteLengthM, .001);
         if ((I == 0 && Gate.DistanceM != 0.0) || Gate.DistanceM <= PreviousDistanceM
-            || Gate.DistanceM >= Candidate.RouteLengthM || (I > 0 && Gate.DistanceM - PreviousDistanceM < 20.0))
-        { Error = TEXT("Checkpoint 0 must start at distance 0; later distances must increase by at least 20 metres and precede loop end."); return false; }
+            || (Gate.DistanceM >= Candidate.RouteLengthM && !bSprintFinish)
+            || (I > 0 && Gate.DistanceM - PreviousDistanceM < 20.0))
+        { Error = TEXT("The first gate must start at distance 0; ordered gates must be separated by 20 metres and remain on the event route."); return false; }
         double ErrorM = 0.0;
         const double ActualDistanceM = Candidate.ClosestDistanceM(Gate.Location, ErrorM);
         if (ErrorM > 0.5 || FMath::Abs(ActualDistanceM - Gate.DistanceM) > 0.5)
-        { Error = FString::Printf(TEXT("Checkpoint %d must lie on its declared route distance (within 0.5 metres)."), I); return false; }
+        {
+            Error = FString::Printf(TEXT("Checkpoint %d must lie on its declared route distance (within 0.5 metres): declared %.3f m, projected %.3f m, geometric miss %.3f m (route %.3f m, %d laps)."),
+                I, Gate.DistanceM, ActualDistanceM, ErrorM, Candidate.RouteLengthM, Candidate.Laps);
+            return false;
+        }
         const FVector2D Tangent = (Candidate.PointAtDistance(Gate.DistanceM + 1.0)
             - Candidate.PointAtDistance(Gate.DistanceM - 1.0)).GetSafeNormal();
         if (FVector2D::DotProduct(Tangent, FVector2D(Gate.Forward.X, Gate.Forward.Y)) < 0.95)
@@ -203,11 +246,13 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         Candidate.Checkpoints.Add(Gate);
         PreviousDistanceM = Gate.DistanceM;
     }
-    if (Candidate.RouteLengthM - PreviousDistanceM < 20.0)
-    { Error = TEXT("Last checkpoint must be at least 20 metres before the finish line."); return false; }
+    if ((Candidate.Laps == 0 && !FMath::IsNearlyEqual(PreviousDistanceM, Candidate.RouteLengthM, .001))
+        || (Candidate.Laps > 0 && Candidate.RouteLengthM - PreviousDistanceM < 20.0))
+    { Error = Candidate.Laps == 0 ? TEXT("Point-to-point finish gate must mark the route endpoint.")
+        : TEXT("Last circuit checkpoint must be at least 20 metres before the start/finish line."); return false; }
 
     if (!Array(Root, TEXT("opponents"), Items, 1, 15, Error)) return false;
-    TSet<FString> Names;
+    TSet<FString> Names, OpponentIds;
     for (const TSharedPtr<FJsonValue>& Item : *Items)
     {
         const TSharedPtr<FJsonObject>* Object = nullptr;
@@ -215,17 +260,30 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         { Error = TEXT("Each opponent must be an object."); return false; }
         FADRaceOpponent Opponent;
         double Color[3] = {}, Speed = 0.0, Lane = 0.0;
-        if (!String(*Object, TEXT("name"), Opponent.Name, Error)
+        if (!Identifier(*Object, TEXT("id"), Opponent.Id, Error)
+            || !String(*Object, TEXT("name"), Opponent.Name, Error)
             || !Tuple((*Object)->TryGetField(TEXT("color")), Color, 3, TEXT("color"), Error)
             || !Number(*Object, TEXT("speedScale"), Speed, 0.6, 1.2, Error)
             || !Number(*Object, TEXT("laneOffsetCm"), Lane, -300, 300, Error)) return false;
-        if (Names.Contains(Opponent.Name.ToLower())) { Error = TEXT("Opponent names must be unique."); return false; }
+        if (Names.Contains(Opponent.Name.ToLower()) || OpponentIds.Contains(Opponent.Id))
+        { Error = TEXT("Opponent names and stable IDs must be unique."); return false; }
         Names.Add(Opponent.Name.ToLower());
+        OpponentIds.Add(Opponent.Id);
         if (Color[0] < 0 || Color[0] > 1 || Color[1] < 0 || Color[1] > 1 || Color[2] < 0 || Color[2] > 1)
         { Error = TEXT("Opponent color components must be in [0, 1]."); return false; }
         Opponent.Color = FLinearColor(static_cast<float>(Color[0]), static_cast<float>(Color[1]), static_cast<float>(Color[2]), 1.0f);
         Opponent.SpeedScale = static_cast<float>(Speed);
         Opponent.LaneOffsetCm = static_cast<float>(Lane);
+        const TSharedPtr<FJsonObject>* PersonalityObject = nullptr;
+        double Aggression = 0., Conservatism = 0., Mistakes = 0.;
+        if (!(*Object)->TryGetObjectField(TEXT("personality"), PersonalityObject) || !PersonalityObject
+            || !PersonalityObject->IsValid()
+            || !Number(*PersonalityObject, TEXT("overtakeAggression"), Aggression, 0., 1., Error)
+            || !Number(*PersonalityObject, TEXT("brakingConservatism"), Conservatism, 0., 1., Error)
+            || !Number(*PersonalityObject, TEXT("pressureMistakeFrequency"), Mistakes, 0., 1., Error)) return false;
+        Opponent.Personality.OvertakeAggression = static_cast<float>(Aggression);
+        Opponent.Personality.BrakingConservatism = static_cast<float>(Conservatism);
+        Opponent.Personality.PressureMistakeFrequency = static_cast<float>(Mistakes);
         Candidate.Opponents.Add(Opponent);
     }
 
@@ -239,8 +297,10 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         const double StartProjection = FVector::DotProduct(FromStart, Candidate.Checkpoints[0].Forward);
         double ErrorM = 0.0;
         Candidate.ClosestDistanceM(Position, ErrorM);
+        // A sprint grid is staged on the approach road before its first route
+        // point. The catalog validates those slots against paved road bounds.
         if (Values[2] < 60 || Values[2] > 150 || FMath::Abs(Values[3]) > 180 || StartProjection > -500
-            || StartProjection < -15000 || ErrorM > 8)
+            || StartProjection < -15000 || (Candidate.Laps > 0 && ErrorM > 8))
         { Error = TEXT("Grid entries must be 5-150 metres behind the start, within 8 metres of the route, with valid height/yaw."); return false; }
         const FTransform Transform(FRotator(0, Values[3], 0), Position);
         if (FVector::DotProduct(Transform.GetUnitAxis(EAxis::X), Candidate.Checkpoints[0].Forward) < 0.95)

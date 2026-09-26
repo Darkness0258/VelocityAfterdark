@@ -209,7 +209,8 @@ bool AADAtmosphere::CacheDistrict()
         UMaterialInterface* Original = Mesh->GetMaterial(Slot);
         if (!Original) continue;
         const FString Name = Original->GetName();
-        const bool bRoad = Name == TEXT("M_Asphalt");
+        const bool bRoad = Name == TEXT("M_Asphalt") || Name == TEXT("M_Asphalt_Smooth")
+            || Name == TEXT("M_Asphalt_PolyHaven");
         const bool bEmissive = Name == TEXT("M_WindowWarm") || Name == TEXT("M_WindowCool") || Name == TEXT("M_EmissiveWhite");
         if (!bRoad && !bEmissive) continue;
         UMaterialInstanceDynamic*& Dynamic = MaterialCache.FindOrAdd(Original);

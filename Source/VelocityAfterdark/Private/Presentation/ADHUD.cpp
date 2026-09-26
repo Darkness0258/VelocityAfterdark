@@ -70,10 +70,12 @@ void AADHUD::DrawHUD()
         Label(Cinematic->GetMessage(),76,71,1.0f,White);
         Panel(52,922,1810,100,Black);
         if (Cinematic->GetMode()==EADCinematicMode::Photo)
-            Label(TEXT("WASD  MOVE    Q / E  VERTICAL    ARROWS / RIGHT STICK  LOOK    Z / X  FOCAL LENGTH"),76,940,.8f,White);
+            Label(TEXT("WASD MOVE    Q / E VERTICAL    ARROWS / RIGHT STICK LOOK    Z / X FOV"),76,940,.8f,White);
         else Label(FString::Printf(TEXT("%.1f / %.1f SEC     LEFT / RIGHT  SCRUB    ENTER / A  PLAY / PAUSE    SHIFT  SLOW    C  CAMERA"),
             Cinematic->GetReplaySeconds(),Cinematic->GetReplayDuration()),76,940,.8f,White);
-        Label(TEXT("F8  SAVE PHOTO    H  HIDE UI    ESC  RETURN TO DRIVE"),76,982,.78f,Accent);
+        if (Cinematic->GetMode()==EADCinematicMode::Photo)
+            Label(TEXT("1-4 LOOK    R / F FOCUS    G / T APERTURE    [ / ] EXPOSURE    F8 SAVE    H HIDE    ESC RETURN"),76,982,.7f,Accent);
+        else Label(TEXT("F8  SAVE PHOTO    H  HIDE UI    ESC  RETURN TO DRIVE"),76,982,.78f,Accent);
         return;
     }
     if (Settings && Settings->IsOpen()) { DrawSettings(); return; }
@@ -143,6 +145,7 @@ void AADHUD::DrawHUD()
             Label(FString::Printf(TEXT("HEAT %d   /   %s"),Police->GetHeat(),*Police->GetStateLabel().ToUpper()),1320,162,.92f,FLinearColor(1,.37f,.23f));
         }
         Panel(1530,740,326,277,Black);
+        Panel(1530,740,326,2,FLinearColor(.18f,.31f,.32f,.95f));
         const bool bMph=Settings && Settings->UsesMph();
         Label(FString::Printf(TEXT("%03d"),FMath::RoundToInt(FMath::Abs(State.SpeedKmh)*(bMph ? .621371f : 1.f))),1552,834,4.0f,White);
         Label(bMph ? TEXT("MPH") : TEXT("KM/H"),1770,925,.8f,Muted);
@@ -156,7 +159,28 @@ void AADHUD::DrawHUD()
             const FLinearColor Color=I/28.0f<RpmFraction?(I>23?FLinearColor(1,.22f,.13f):Accent):FLinearColor(.14f,.19f,.21f);
             Panel(1554+I*10,986,7,6,Color);
         }
-        Label(FString::Printf(TEXT("N2O %.0f%%   /   BODY %.0f%%"),Car->GetEffects()->GetNitrousFraction()*100.f,Car->GetEffects()->GetHealth()*100.f),1552,750,.72f,Accent);
+        const float SpeedFraction=FMath::Clamp(FMath::Abs(State.SpeedKmh)/300.f,0.f,1.f);
+        for (int32 Tick=0;Tick<25;++Tick)
+        {
+            const float Angle=FMath::DegreesToRadians(210.f+Tick*(120.f/24.f));
+            // Lower the speed arc so its crown clears the two compact vehicle
+            // status readouts above it at every UI scale.
+            const FVector2D Center(1693.f,868.f);
+            const FVector2D Inner=Center+FVector2D(FMath::Cos(Angle),FMath::Sin(Angle))*86.f;
+            const FVector2D Outer=Center+FVector2D(FMath::Cos(Angle),FMath::Sin(Angle))*99.f;
+            const FLinearColor TickColor=Tick<SpeedFraction*24.f
+                ? (Tick>19 ? FLinearColor(1.f,.27f,.16f) : Accent) : FLinearColor(.18f,.24f,.26f);
+            DrawLine(UiOffsetX+Inner.X*UiScale,UiOffsetY+Inner.Y*UiScale,
+                UiOffsetX+Outer.X*UiScale,UiOffsetY+Outer.Y*UiScale,TickColor,2.f*UiScale);
+        }
+        // Keep two short labels in their own columns instead of one long line
+        // running through the instrument arc.
+        Label(TEXT("NITROUS"),1552,750,.52f,Muted);
+        Label(FString::Printf(TEXT("%.0f%%"),Car->GetEffects()->GetNitrousFraction()*100.f),1552,770,.70f,Accent);
+        Label(TEXT("CONDITION"),1734,750,.52f,Muted);
+        Label(FString::Printf(TEXT("%.0f%%"),Car->GetEffects()->GetHealth()*100.f),1734,770,.70f,White);
+        DrawLine(UiOffsetX+1693.f*UiScale,UiOffsetY+749.f*UiScale,
+            UiOffsetX+1693.f*UiScale,UiOffsetY+787.f*UiScale,FLinearColor(.20f,.28f,.30f),1.f*UiScale);
         if (Mode && Mode->GetExploration() && Mode->GetExploration()->IsReady()
             && (!PC->GetRaceManager() || PC->GetRaceManager()->GetState()==EADRaceState::Idle)
             && (!Mode->GetPoliceDirector() || !Mode->GetPoliceDirector()->IsActive()))
@@ -192,9 +216,13 @@ void AADHUD::DrawHUD()
             const float X=1070.f;
             Panel(X,142,770,Chapter ? 144.f : 90.f,Black);
             Panel(X,142,3,Chapter ? 144.f : 90.f,Accent);
-            Label(FString::Printf(TEXT("%s   /   %lld REP   /   %lld CR"),*Career->GetRankName(Profile.Reputation).ToUpper(),Profile.Reputation,Profile.Credits),X+24,157,.73f,Accent);
-            Label(Chapter ? Chapter->Title.ToUpper() : TEXT("DOCKSIDE SERIES COMPLETE"),X+24,194,1.0f,White);
-            if (Chapter) Label(TEXT("N / LB+B   OPEN CAREER    /    ")+Chapter->Crew.ToUpper(),X+24,241,.7f,Muted);
+            Label(TEXT("CAREER  /  DRIVER PROFILE"),X+24,153,.54f,Muted);
+            Label(FString::Printf(TEXT("CREDITS  %lld"),Profile.Credits),X+606,153,.57f,Accent);
+            DrawLine(UiOffsetX+(X+24)*UiScale,UiOffsetY+176*UiScale,
+                UiOffsetX+(X+746)*UiScale,UiOffsetY+176*UiScale,FLinearColor(.16f,.24f,.26f),1.f*UiScale);
+            Label(FString::Printf(TEXT("%s  /  %lld REP"),*Career->GetRankName(Profile.Reputation).ToUpper(),Profile.Reputation),X+24,184,.66f,Accent);
+            Label(Chapter ? Chapter->Title.ToUpper() : TEXT("DOCKSIDE SERIES COMPLETE"),X+24,210,1.0f,White);
+            if (Chapter) Label(TEXT("N / LB+B   OPEN CAREER    /    ")+Chapter->Crew.ToUpper(),X+24,248,.62f,Muted);
         }
     }
     if (const auto* Online=GetWorld()->GetGameInstance()->GetSubsystem<UADOnlineSubsystem>(); Online && !Online->GetStatus().IsEmpty())
@@ -412,7 +440,9 @@ void AADHUD::DrawRace()
     Panel(1360,50,496,175,Black);
     Label(TEXT("POSITION"),1386,70,.7f,Muted);
     Label(FString::Printf(TEXT("%d / %d"),Player.Place,Manager->GetRacers().Num()),1386,101,2.1f,Accent);
-    Label(FString::Printf(TEXT("LAP %d / %d"),FMath::Min(Player.Progress.CompletedLaps+1,Definition.Laps),Definition.Laps),1630,79,1.05f,White);
+    Label(Definition.Laps==0 ? TEXT("SPRINT") :
+        *FString::Printf(TEXT("LAP %d / %d"),FMath::Min(Player.Progress.CompletedLaps+1,Definition.Laps),Definition.Laps),
+        1630,79,1.05f,White);
     Label(DifficultyName(Manager->GetDifficultyIndex()),1630,129,.7f,Muted);
     const FString Checkpoint=Player.Progress.NextCheckpoint==0
         ? (Player.Progress.Started ? TEXT("FINISH LINE") : TEXT("START LINE"))
@@ -422,7 +452,8 @@ void AADHUD::DrawRace()
     Panel(62,147,420,185,Black);
     Label(TEXT("RACE TIME"),82,164,.7f,Muted);
     Label(RaceTime((Player.Progress.Finished ? Player.Progress.FinishSeconds : Manager->GetElapsedSeconds())+Player.PenaltySeconds),82,196,1.6f,White);
-    Label(TEXT("BEST LAP  ")+(Player.Progress.BestLapSeconds>0. ? RaceTime(Player.Progress.BestLapSeconds) : TEXT("--:--.---")),82,249,.77f,Accent);
+    Label(Definition.Laps==0 ? TEXT("POINT TO POINT  /  NO LAPS") :
+        TEXT("BEST LAP  ")+(Player.Progress.BestLapSeconds>0. ? RaceTime(Player.Progress.BestLapSeconds) : TEXT("--:--.---")),82,249,.77f,Accent);
     Label(Player.PenaltySeconds>0. ? FString::Printf(TEXT("RECOVERY PENALTY  +%.1f S"),Player.PenaltySeconds)
         : FString::Printf(TEXT("R  RECOVER  /  +%.0f SECOND PENALTY"),Definition.RecoveryPenaltySeconds),82,289,.65f,Muted);
     if (Player.bWrongWay && !Player.Progress.Finished)
@@ -469,7 +500,8 @@ void AADHUD::DrawRace()
     const auto Line=[&](FVector2f A,FVector2f B,FLinearColor Color,float Width)
     { DrawLine(UiOffsetX+A.X*UiScale,UiOffsetY+A.Y*UiScale,UiOffsetX+B.X*UiScale,UiOffsetY+B.Y*UiScale,Color,Width*UiScale); };
     for (int32 Index=0;Index<Definition.RoutePoints.Num();++Index)
-        Line(Plot(Definition.RoutePoints[Index].Position),Plot(Definition.RoutePoints[(Index+1)%Definition.RoutePoints.Num()].Position),Muted,3.f);
+        if (Definition.Laps>0 || Index+1<Definition.RoutePoints.Num())
+            Line(Plot(Definition.RoutePoints[Index].Position),Plot(Definition.RoutePoints[(Index+1)%Definition.RoutePoints.Num()].Position),Muted,3.f);
     if (Definition.Checkpoints.IsValidIndex(Player.Progress.NextCheckpoint) && !Player.Progress.Finished)
     {
         const FVector Gate=Definition.Checkpoints[Player.Progress.NextCheckpoint].Location;
@@ -499,7 +531,7 @@ void AADHUD::DrawRace()
         Label(TEXT("DRIVER"),620,464,.7f,Muted);
         Label(TEXT("TOTAL TIME"),1030,464,.7f,Muted);
         Label(TEXT("PENALTY"),1230,464,.7f,Muted);
-        Label(TEXT("BEST LAP"),1380,464,.7f,Muted);
+        Label(Definition.Laps==0 ? TEXT("RACE TYPE") : TEXT("BEST LAP"),1380,464,.7f,Muted);
         for (int32 Place=1;Place<=Manager->GetRacers().Num();++Place)
         {
             for (const auto& Racer : Manager->GetRacers())
@@ -510,7 +542,8 @@ void AADHUD::DrawRace()
                 Label(Racer.Name.ToUpper(),620,Y,.85f,Racer.Color);
                 Label(Racer.bDNF ? TEXT("DNF") : Racer.Progress.Finished ? RaceTime(Racer.Progress.FinishSeconds+Racer.PenaltySeconds) : TEXT("RACING"),1030,Y,.8f,White);
                 Label(FString::Printf(TEXT("+%.1f"),Racer.PenaltySeconds),1230,Y,.8f,Muted);
-                Label(Racer.Progress.BestLapSeconds>0 ? RaceTime(Racer.Progress.BestLapSeconds) : TEXT("--:--.---"),1380,Y,.72f,Muted);
+                Label(Definition.Laps==0 ? TEXT("SPRINT") :
+                    Racer.Progress.BestLapSeconds>0 ? RaceTime(Racer.Progress.BestLapSeconds) : TEXT("--:--.---"),1380,Y,.72f,Muted);
             }
         }
         Label(TEXT("ENTER / A  RACE AGAIN     BACKSPACE / D-PAD LEFT  FREE DRIVE"),540,766,.73f,Accent);

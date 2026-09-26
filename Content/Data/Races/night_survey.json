@@ -425,7 +425,13 @@
         0.075
       ],
       "speedScale": 1.0,
-      "laneOffsetCm": 300
+      "laneOffsetCm": 300,
+      "id": "emil_rook",
+      "personality": {
+        "overtakeAggression": 0.77,
+        "brakingConservatism": 0.62,
+        "pressureMistakeFrequency": 0.12
+      }
     },
     {
       "name": "Sana Finch",
@@ -435,7 +441,13 @@
         0.78
       ],
       "speedScale": 0.97,
-      "laneOffsetCm": -300
+      "laneOffsetCm": -300,
+      "id": "sana_finch",
+      "personality": {
+        "overtakeAggression": 0.38,
+        "brakingConservatism": 0.72,
+        "pressureMistakeFrequency": 0.08
+      }
     },
     {
       "name": "Nico Bram",
@@ -445,7 +457,13 @@
         0.85
       ],
       "speedScale": 0.94,
-      "laneOffsetCm": 0
+      "laneOffsetCm": 0,
+      "id": "nico_bram",
+      "personality": {
+        "overtakeAggression": 0.92,
+        "brakingConservatism": 0.26,
+        "pressureMistakeFrequency": 0.24
+      }
     }
   ]
 }

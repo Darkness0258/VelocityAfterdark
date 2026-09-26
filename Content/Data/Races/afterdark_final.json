@@ -1070,7 +1070,13 @@
         0.075
       ],
       "speedScale": 1.0,
-      "laneOffsetCm": 300
+      "laneOffsetCm": 300,
+      "id": "inez_vale",
+      "personality": {
+        "overtakeAggression": 0.54,
+        "brakingConservatism": 0.81,
+        "pressureMistakeFrequency": 0.09
+      }
     },
     {
       "name": "Dara Quinn",
@@ -1080,7 +1086,13 @@
         0.78
       ],
       "speedScale": 0.97,
-      "laneOffsetCm": -300
+      "laneOffsetCm": -300,
+      "id": "dara_quinn",
+      "personality": {
+        "overtakeAggression": 0.58,
+        "brakingConservatism": 0.74,
+        "pressureMistakeFrequency": 0.1
+      }
     },
     {
       "name": "Soren Pell",
@@ -1090,7 +1102,13 @@
         0.85
       ],
       "speedScale": 0.94,
-      "laneOffsetCm": 0
+      "laneOffsetCm": 0,
+      "id": "soren_pell",
+      "personality": {
+        "overtakeAggression": 0.89,
+        "brakingConservatism": 0.35,
+        "pressureMistakeFrequency": 0.22
+      }
     }
   ]
 }

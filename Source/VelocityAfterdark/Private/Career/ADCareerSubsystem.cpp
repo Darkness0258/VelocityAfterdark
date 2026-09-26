@@ -256,6 +256,56 @@ FString UADCareerSubsystem::GetRankName(int64 Reputation) const
     return Ranks[0].Name;
 }
 
+FString UADCareerSubsystem::ComposeBriefing(const FADGarageProfile& Profile,
+    const FADCareerChapter& Chapter, const FADRaceDefinition& Race) const
+{
+    const FADRivalMemory* MostRelevant = nullptr;
+    const FADRaceOpponent* RelevantOpponent = nullptr;
+    for (const FADRaceOpponent& Opponent : Race.Opponents)
+    {
+        const FADRivalMemory* Memory = Profile.RivalMemories.FindByPredicate(
+            [&Opponent](const FADRivalMemory& Item) { return Item.RivalId == Opponent.Id; });
+        if (Memory && (!MostRelevant || Memory->Encounters > MostRelevant->Encounters))
+        {
+            MostRelevant = Memory;
+            RelevantOpponent = &Opponent;
+        }
+    }
+    if (!MostRelevant || !RelevantOpponent || MostRelevant->Encounters < 1) return Chapter.Briefing;
+
+    FString Context;
+    if (MostRelevant->PlayerWins > MostRelevant->RivalWins)
+        Context = FString::Printf(TEXT("%s remembers the last loss and wants a runback."), *RelevantOpponent->Name);
+    else if (MostRelevant->RivalWins > MostRelevant->PlayerWins)
+        Context = FString::Printf(TEXT("%s beat you last time and expects you to fold."), *RelevantOpponent->Name);
+    else
+        Context = FString::Printf(TEXT("%s remembers your tied series. This run decides who leads."), *RelevantOpponent->Name);
+    return Chapter.Briefing + TEXT(" ") + Context;
+}
+
+FString UADCareerSubsystem::ComposeVictoryLine(const FADGarageProfile& Profile,
+    const FADCareerChapter& Chapter, const FADRaceDefinition& Race) const
+{
+    const FADRivalMemory* MostRelevant = nullptr;
+    const FADRaceOpponent* RelevantOpponent = nullptr;
+    for (const FADRaceOpponent& Opponent : Race.Opponents)
+    {
+        const FADRivalMemory* Memory = Profile.RivalMemories.FindByPredicate(
+            [&Opponent](const FADRivalMemory& Item) { return Item.RivalId == Opponent.Id; });
+        if (Memory && (!MostRelevant || Memory->Encounters > MostRelevant->Encounters))
+        {
+            MostRelevant = Memory;
+            RelevantOpponent = &Opponent;
+        }
+    }
+    if (!MostRelevant || !RelevantOpponent) return Chapter.VictoryLine;
+
+    const FString SeriesLine = FString::Printf(TEXT("%s series: %d to %d. Respect %d%% / grudge %d%%."),
+        *RelevantOpponent->Name, MostRelevant->PlayerWins, MostRelevant->RivalWins,
+        FMath::RoundToInt(MostRelevant->Respect * 100.f), FMath::RoundToInt(MostRelevant->Grudge * 100.f));
+    return Chapter.VictoryLine + TEXT(" ") + SeriesLine;
+}
+
 bool UADCareerSubsystem::ComputeReward(const FADGarageProfile& Profile, const FString& ChapterId,
     int32 Place, FADCareerReward& OutReward, FString& OutError) const
 {

@@ -47,16 +47,23 @@ bool FADCareerRouteCatalogTest::RunTest(const FString&)
     FADRaceCatalog Catalog;
     FString Error;
     if (!TestTrue(TEXT("All authored courses load with road coverage"),Catalog.LoadDefault(Error))) { AddError(Error); return false; }
-    TestEqual(TEXT("Eight distinct courses"),Catalog.GetRaces().Num(),8);
+    TestEqual(TEXT("Nine distinct courses"),Catalog.GetRaces().Num(),9);
     TSet<FString> Ids;
     for (const auto& Race : Catalog.GetRaces())
     {
         Ids.Add(Race.Id);
         TestEqual(TEXT("Career races contain three opponents"),Race.Opponents.Num(),3);
         TestEqual(TEXT("Four physical starting positions"),Race.Grid.Num(),4);
-        TestTrue(TEXT("Event has a drivable kilometre-scale circuit"),Race.RouteLengthM>1000.);
+        TestTrue(TEXT("Event has a drivable kilometre-scale route"),Race.RouteLengthM>1000.);
     }
     TestEqual(TEXT("Route identities do not alias"),Ids.Num(),Catalog.GetRaces().Num());
+    const auto* Sprint=Catalog.Find(TEXT("afterdark_sprint_v1"));
+    if (!TestNotNull(TEXT("Point-to-point sprint is catalogued"),Sprint)) return false;
+    TestEqual(TEXT("Sprint has no laps"),Sprint->Laps,0);
+    TestTrue(TEXT("Sprint route is open and ends at 4.8 km"),FMath::IsNearlyEqual(Sprint->RouteLengthM,4800.,.01));
+    TestTrue(TEXT("Sprint finish differs from its start"),!Sprint->PointAtDistance(4800.).Equals(Sprint->PointAtDistance(0.),.001));
+    TestTrue(TEXT("Sprint clamps beyond the finish instead of wrapping"),
+        Sprint->PointAtDistance(4900.).Equals(Sprint->PointAtDistance(4800.),.001));
     const auto* Final=Catalog.Find(TEXT("afterdark_final_v1"));
     if (!TestNotNull(TEXT("City final is catalogued"),Final)) return false;
     TestEqual(TEXT("Final is one continuous lap"),Final->Laps,1);
@@ -89,7 +96,7 @@ bool FADCareerRouteCatalogTest::RunTest(const FString&)
         if (!Fixture.WriteJson(TEXT("catalog.json"),Object)) { AddError(TEXT("Cannot write isolated catalog fixture")); return; }
         TestFalse(Label,LoadFixture());
         TestFalse(TEXT("Failure explains unavailable event content"),Error.IsEmpty());
-        TestEqual(TEXT("Failed reload preserves valid catalog"),Catalog.GetRaces().Num(),8);
+        TestEqual(TEXT("Failed reload preserves valid catalog"),Catalog.GetRaces().Num(),9);
         TestNotNull(TEXT("Failed reload preserves final event"),Catalog.Find(TEXT("afterdark_final_v1")));
     };
     Reject(TEXT("Unknown schema rejected"),[](auto O){O->SetNumberField(TEXT("schemaVersion"),2);});
@@ -124,7 +131,7 @@ bool FADCareerRouteCatalogTest::RunTest(const FString&)
     if (!Fixture.WriteJson(TEXT("foundry_shift.json"),Course)) return false;
     TestFalse(TEXT("Geometrically valid course away from paved roads rejected"),LoadFixture());
     TestTrue(TEXT("Off-road rejection identifies coverage"),Error.Contains(TEXT("paved road")));
-    TestEqual(TEXT("Off-road reload preserves previous content"),Catalog.GetRaces().Num(),8);
+    TestEqual(TEXT("Off-road reload preserves previous content"),Catalog.GetRaces().Num(),9);
     return true;
 }
 

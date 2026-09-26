@@ -16,8 +16,8 @@ enum class EADPoliceState : uint8 { Patrol, Pursuit, Search, Cooldown, Busted };
 
 DECLARE_MULTICAST_DELEGATE(FADPoliceEscaped);
 
-/** Bounded Dockside police prototype. All pursuit motion uses ordinary vehicle controls.
- *  No roadblocks, PIT coordination, helicopter, economic arrest penalty or network authority is claimed.
+/** Bounded Dockside police prototype. Pursuit motion uses ordinary vehicle controls;
+ *  PIT contact uses one gated, cooldown-limited impulse and roadblocks use route data.
  */
 UCLASS()
 class VELOCITYAFTERDARK_API AADPoliceDirector : public AActor
@@ -40,6 +40,8 @@ public:
     const FString& GetError() const { return Error; }
     float GetSearchRemainingSeconds() const;
     int32 GetUnitCount() const;
+    int32 GetPITCount() const { return PITCount; }
+    int32 GetRoadblockCount() const;
     FADPoliceEscaped OnEscaped;
 
 private:
@@ -53,9 +55,12 @@ private:
         TWeakObjectPtr<UStaticMeshComponent> BlueLens;
         bool bSeesPlayer = false;
         bool bDirectControl = false;
+        bool bRoadblock = false;
         bool bRetired = false;
         float RetirementSeconds = 0.f;
         float ClearanceM = 100.f;
+        float RoadblockSeconds = 0.f;
+        float PITCooldownSeconds = 0.f;
     };
     struct FPoliceSettings
     {
@@ -74,11 +79,11 @@ private:
         double SpawnMinDistanceM = 120.;
         double SpawnMaxDistanceM = 220.;
         double SenseIntervalSeconds = .2;
-        int32 MaxUnits = 3;
+        int32 MaxUnits = 5;
     } Settings;
 
     bool LoadSettings(FString& OutError);
-    bool SpawnUnit();
+    bool SpawnUnit(bool bRoadblock = false, int32 RoadblockSlot = 0);
     void RetireUnit(FPoliceUnit& Unit);
     void RemoveRetiredUnits(float DeltaSeconds);
     void ClearUnits();
@@ -104,9 +109,12 @@ private:
     double BustProgressSeconds = 0.;
     double SenseCountdown = 0.;
     double SpawnRetrySeconds = 0.;
+    double RoadblockRetrySeconds = 0.;
     int32 Heat = 0;
     // A failed unit cannot be replaced repeatedly to keep an ongoing chase alive.
     int32 PursuitUnitsDispatched = 0;
+    int32 PITCount = 0;
+    bool bRoadblockDispatched = false;
     bool bReady = false;
     bool bEnabled = true;
     bool bAnySeesPlayer = false;

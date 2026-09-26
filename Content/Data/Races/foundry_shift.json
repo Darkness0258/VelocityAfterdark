@@ -385,7 +385,13 @@
         0.075
       ],
       "speedScale": 1.0,
-      "laneOffsetCm": 300
+      "laneOffsetCm": 300,
+      "id": "dara_quinn",
+      "personality": {
+        "overtakeAggression": 0.58,
+        "brakingConservatism": 0.74,
+        "pressureMistakeFrequency": 0.1
+      }
     },
     {
       "name": "Nico Bram",
@@ -395,7 +401,13 @@
         0.78
       ],
       "speedScale": 0.97,
-      "laneOffsetCm": -300
+      "laneOffsetCm": -300,
+      "id": "nico_bram",
+      "personality": {
+        "overtakeAggression": 0.92,
+        "brakingConservatism": 0.26,
+        "pressureMistakeFrequency": 0.24
+      }
     },
     {
       "name": "Tess Nouri",
@@ -405,7 +417,13 @@
         0.85
       ],
       "speedScale": 0.94,
-      "laneOffsetCm": 0
+      "laneOffsetCm": 0,
+      "id": "tess_nouri",
+      "personality": {
+        "overtakeAggression": 0.42,
+        "brakingConservatism": 0.78,
+        "pressureMistakeFrequency": 0.08
+      }
     }
   ]
 }

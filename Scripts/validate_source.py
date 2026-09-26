@@ -214,6 +214,29 @@ def main() -> None:
             require(on_road(edge), "Checkpoint gate extends outside road collision")
     race_length_m = sum(math.dist(a[:2], b[:2]) for a, b in zip(route, route[1:] + route[:1])) / 100
 
+    # The open-road sprint follows the connected development road graph; it
+    # must remain inside bounded authored paving rather than placing roads
+    # beyond the world just to reach a distance target.
+    sprint = load_json(ROOT / "Content/Data/Races/afterdark_sprint.json")
+    regional_roads = load_json(ROOT / "Content/Data/World/regions.json")["roads"]
+    world_roads = roads + regional_roads
+    def on_world_road(point, clearance=0):
+        return any(all(min(road["start"][axis], road["end"][axis]) - width / 2 + clearance <= point[axis] <=
+                       max(road["start"][axis], road["end"][axis]) + width / 2 - clearance
+                       for axis in (0, 1)) for road in world_roads)
+    sprint_points = sprint["routePoints"]
+    sprint_length_m = sum(math.dist(a[:2], b[:2]) for a, b in zip(sprint_points, sprint_points[1:])) / 100
+    require(sprint["schemaVersion"] == 1 and sprint["laps"] == 0 and 8 <= len(sprint_points) <= 256,
+            "Open-road sprint schema or route cardinality is invalid")
+    require(abs(sprint_length_m - 4800) < .01 and sprint_points[0][:2] != sprint_points[-1][:2],
+            "Sprint must be a 4.8 km point-to-point route with distinct endpoints")
+    for start, end in zip(sprint_points, sprint_points[1:]):
+        for step in range(101):
+            point = [start[axis] + (end[axis] - start[axis]) * step / 100 for axis in (0, 1)]
+            require(on_world_road(point, 100), "Point-to-point sprint leaves paved world roads")
+    for slot in sprint["grid"]:
+        require(on_world_road(slot, 300), "Sprint grid is outside paved road clearance")
+
     python_files = list((ROOT / "Scripts").rglob("*.py"))
     for path in python_files:
         ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))

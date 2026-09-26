@@ -16,6 +16,7 @@ enum class EADRaceState : uint8 { Idle, Countdown, Racing, Results };
 
 struct FADRacerState
 {
+    FString RivalId;
     FString Name;
     FLinearColor Color = FLinearColor::White;
     TWeakObjectPtr<AADVehiclePawn> Car;

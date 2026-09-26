@@ -60,7 +60,8 @@ namespace ADRaceTests
                 FApp::SetUseFixedTimeStep(true);
                 bChangedTimeStep = true;
                 Controller->StartDriving();
-                if (!StartSelectedRace()) return Fail(TEXT("Race did not start."));
+                if (!StartSelectedRace())
+                    return Fail(TEXT("Race did not start: ") + Manager->GetLoadError());
                 if (!ValidateGrid()) return Finish();
                 Stage = 1;
             }
@@ -235,11 +236,17 @@ namespace ADRaceTests
                 const auto& Racer = Manager->GetRacers()[Index];
                 const auto& Progress = Racer.Progress;
                 Test->TestTrue(TEXT("Every racer legally starts and finishes"), Progress.Started && Progress.Finished && !Racer.bDNF);
-                Test->TestEqual(TEXT("Every racer completes configured laps"), Progress.CompletedLaps, Manager->GetDefinition().Laps);
+                const bool bPointToPoint=Manager->GetDefinition().Laps==0;
+                Test->TestEqual(TEXT("Every racer has correct circuit lap count"), Progress.CompletedLaps,
+                    bPointToPoint ? 0 : Manager->GetDefinition().Laps);
                 Test->TestTrue(TEXT("Finish time is finite and inside race elapsed time"), FMath::IsFinite(Progress.FinishSeconds)
                     && Progress.FinishSeconds > 0. && Progress.FinishSeconds <= Manager->GetElapsedSeconds());
-                Test->TestTrue(TEXT("Last and best lap times are positive"), Progress.LastLapSeconds > 0.
-                    && Progress.BestLapSeconds > 0. && Progress.BestLapSeconds <= Progress.LastLapSeconds);
+                if (bPointToPoint)
+                    Test->TestTrue(TEXT("Sprint does not fabricate lap timings"),
+                        Progress.LastLapSeconds==0. && Progress.BestLapSeconds==0.);
+                else
+                    Test->TestTrue(TEXT("Last and best lap times are positive"), Progress.LastLapSeconds > 0.
+                        && Progress.BestLapSeconds > 0. && Progress.BestLapSeconds <= Progress.LastLapSeconds);
                 if (Manager->GetDefinition().Laps == 2)
                 {
                     Test->TestTrue(TEXT("Two lap durations sum to the measured race duration"), FMath::IsNearlyEqual(
@@ -341,8 +348,8 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FADRegionalRaceTest,"Afterdark.Runtime.Regiona
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 void FADRegionalRaceTest::GetTests(TArray<FString>& Names,TArray<FString>& Commands) const
 {
-    Names={TEXT("Foundry"),TEXT("IronQuay"),TEXT("NightSurvey"),TEXT("Northfield"),TEXT("GlassCoast"),TEXT("Sable"),TEXT("AfterdarkFinal")};
-    Commands={TEXT("foundry_shift_v1"),TEXT("iron_quay_v1"),TEXT("night_survey_v1"),TEXT("northfield_run_v1"),TEXT("glass_coast_v1"),TEXT("sable_ring_v1"),TEXT("afterdark_final_v1")};
+    Names={TEXT("Foundry"),TEXT("IronQuay"),TEXT("NightSurvey"),TEXT("Northfield"),TEXT("GlassCoast"),TEXT("Sable"),TEXT("AfterdarkFinal"),TEXT("AfterdarkSprint")};
+    Commands={TEXT("foundry_shift_v1"),TEXT("iron_quay_v1"),TEXT("night_survey_v1"),TEXT("northfield_run_v1"),TEXT("glass_coast_v1"),TEXT("sable_ring_v1"),TEXT("afterdark_final_v1"),TEXT("afterdark_sprint_v1")};
 }
 bool FADRegionalRaceTest::RunTest(const FString& Parameters)
 {

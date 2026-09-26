@@ -1,6 +1,7 @@
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
+#include "Core/ADRaceRules.h"
 #include "Racing/ADRaceDefinition.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
@@ -23,6 +24,9 @@ bool FADRaceDataTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Seven directed gates"),Definition.Checkpoints.Num(),7);
     TestTrue(TEXT("Two kilometre circuit length"),FMath::IsNearlyEqual(Definition.RouteLengthM,2047.95785,.001));
     TestTrue(TEXT("Route wraps backwards"),Definition.PointAtDistance(-10.).Equals(Definition.PointAtDistance(Definition.RouteLengthM-10.),.001));
+    double StartProjectionError=0.;
+    TestTrue(TEXT("Closed-loop seam projects to distance zero"),FMath::IsNearlyZero(
+        Definition.ClosestDistanceM(FVector(0.,0.,80.),StartProjectionError),.001) && StartProjectionError<.001);
     for (const auto& Gate : Definition.Checkpoints)
     {
         double DistanceError=0.;
@@ -59,9 +63,47 @@ bool FADRaceDataTest::RunTest(const FString& Parameters)
     Reject(TEXT("Unsupported pace combination rejected"),[](auto O){O->GetArrayField(TEXT("opponents"))[0]->AsObject()->SetNumberField(TEXT("speedScale"),1.2);
         O->SetArrayField(TEXT("difficultySpeedScales"),{MakeShared<FJsonValueNumber>(.8),MakeShared<FJsonValueNumber>(1),MakeShared<FJsonValueNumber>(1.2)});});
     Reject(TEXT("Lane outside driver envelope rejected"),[](auto O){O->GetArrayField(TEXT("opponents"))[0]->AsObject()->SetNumberField(TEXT("laneOffsetCm"),400);});
+    Reject(TEXT("Unbounded driver personality rejected"),[](auto O){O->GetArrayField(TEXT("opponents"))[0]->AsObject()
+        ->GetObjectField(TEXT("personality"))->SetNumberField(TEXT("overtakeAggression"),1.2);});
     IFileManager::Get().Delete(*BadPath);
     TestFalse(TEXT("Missing race rejected"),Definition.LoadFromJson(BadPath,Error));
     TestTrue(TEXT("Valid reload clears error"),Definition.LoadFromJson(Path,Error) && Error.IsEmpty());
+    const FString SprintPath=FPaths::ProjectContentDir()/TEXT("Data/Races/afterdark_sprint.json");
+    FADRaceDefinition Sprint;
+    if (!TestTrue(TEXT("Open-road sprint loads"),Sprint.LoadFromJson(SprintPath,Error))) { AddError(Error); return false; }
+    TestEqual(TEXT("Sprint uses zero laps"),Sprint.Laps,0);
+    TestTrue(TEXT("Sprint retains its route endpoint"),Sprint.PointAtDistance(6000.).Equals(FVector2D(82000.,-24000.),.001));
+    TestTrue(TEXT("Sprint does not wrap behind its start"),Sprint.PointAtDistance(-100.).Equals(FVector2D(-40000.,0.),.001));
+    double SprintStartError=0.;
+    TestTrue(TEXT("Sprint start gate projects to route distance zero"),FMath::IsNearlyZero(
+        Sprint.ClosestDistanceM(FVector(-40000.,0.,80.),SprintStartError),.001) && SprintStartError<.001);
+    double SprintError=0.;
+    TestTrue(TEXT("Sprint projection retains the finish distance"),FMath::IsNearlyEqual(
+        Sprint.ClosestDistanceM(FVector(82000.,-24000.,80.),SprintError),4800.,.001) && SprintError<.001);
+    TArray<ADRaceRules::Gate> SprintGates;
+    for (const auto& Gate : Sprint.Checkpoints)
+        SprintGates.Add({{Gate.Location.X,Gate.Location.Y,Gate.Location.Z},
+            {Gate.Forward.X,Gate.Forward.Y,Gate.Forward.Z},Gate.HalfWidthCm,Gate.HalfHeightCm});
+    ADRaceRules::Progress Progress;
+    TestTrue(TEXT("Point-to-point progress initializes without laps"),Progress.Reset(SprintGates.Num(),Sprint.Laps));
+    TestTrue(TEXT("Grid sample is valid"),Progress.ResetSample({-40000.,600.,80.},0.));
+    ADRaceRules::Event StartEvent=ADRaceRules::Event::None;
+    ADRaceRules::Event MiddleEvent=ADRaceRules::Event::None;
+    ADRaceRules::Event FinishEvent=ADRaceRules::Event::None;
+    for (int32 Step=1;Step<=240;++Step)
+    {
+        const double DistanceM=Step*20.;
+        const FVector2D Position=Sprint.PointAtDistance(DistanceM);
+        const auto Event=Progress.Sample({Position.X,Position.Y,80.},Step,SprintGates.GetData(),SprintGates.Num());
+        if (Event==ADRaceRules::Event::Started) StartEvent=Event;
+        if (Event==ADRaceRules::Event::Checkpoint) MiddleEvent=Event;
+        if (Event==ADRaceRules::Event::Finished) FinishEvent=Event;
+    }
+    TestEqual(TEXT("Start crossing starts the sprint"),StartEvent,ADRaceRules::Event::Started);
+    TestEqual(TEXT("Middle gate advances route progress"),MiddleEvent,ADRaceRules::Event::Checkpoint);
+    TestEqual(TEXT("Final gate ends the sprint"),FinishEvent,ADRaceRules::Event::Finished);
+    TestTrue(TEXT("Sprint finishes once without accumulating laps"),Progress.Finished && Progress.CompletedLaps==0
+        && Progress.FinishSeconds>=239. && Progress.FinishSeconds<=240.);
     return true;
 }
 #endif

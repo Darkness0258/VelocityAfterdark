@@ -16,5 +16,5 @@
   "spawnMinDistanceM": 120,
   "spawnMaxDistanceM": 220,
   "senseIntervalSeconds": 0.2,
-  "maxUnits": 3
+  "maxUnits": 5
 }

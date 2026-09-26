@@ -177,7 +177,11 @@ bool FADRaceCatalog::LoadFromJson(const FString& CatalogPath, const FString& Dis
             return false;
         }
         FADRaceDefinition Race;
-        if (!Race.LoadFromJson(FPaths::GetPath(CatalogPath) / File, OutError)) return false;
+        if (!Race.LoadFromJson(FPaths::GetPath(CatalogPath) / File, OutError))
+        {
+            OutError = FString::Printf(TEXT("Race '%s': %s"), *Id, *OutError);
+            return false;
+        }
         if (Race.Id != Id)
         {
             OutError = FString::Printf(TEXT("Race catalog ID '%s' does not match definition '%s'."), *Id, *Race.Id);

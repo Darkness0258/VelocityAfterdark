@@ -21,9 +21,11 @@
 
 namespace
 {
-constexpr int32 CurrentSchema = 5;
+constexpr int32 CurrentSchema = 6;
 constexpr int64 MaxSaveBytes = 64 * 1024;
 constexpr int64 MaxCredits = 1000000000;
+constexpr int32 MaxRivalMemories = 32;
+constexpr int32 MaxRivalEncounters = 128;
 
 bool Number(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, double Min, double Max,
     double& Out, FString& Error)
@@ -139,6 +141,20 @@ FString Encode(const FADGarageProfile& Profile)
     Payload->SetNumberField(TEXT("racesFinished"),static_cast<double>(Profile.RacesFinished));
     Payload->SetArrayField(TEXT("completedChapters"),Ids(Profile.CompletedChapters));
     Payload->SetArrayField(TEXT("awardedRaceIds"),Ids(Profile.AwardedRaceIds));
+    TArray<TSharedPtr<FJsonValue>> RivalMemories;
+    for (const FADRivalMemory& Memory : Profile.RivalMemories)
+    {
+        const auto Rival = MakeShared<FJsonObject>();
+        Rival->SetStringField(TEXT("rivalId"), Memory.RivalId);
+        Rival->SetStringField(TEXT("lastChapterId"), Memory.LastChapterId);
+        Rival->SetNumberField(TEXT("encounters"), Memory.Encounters);
+        Rival->SetNumberField(TEXT("playerWins"), Memory.PlayerWins);
+        Rival->SetNumberField(TEXT("rivalWins"), Memory.RivalWins);
+        Rival->SetNumberField(TEXT("respect"), Memory.Respect);
+        Rival->SetNumberField(TEXT("grudge"), Memory.Grudge);
+        RivalMemories.Add(MakeShared<FJsonValueObject>(Rival));
+    }
+    Payload->SetArrayField(TEXT("rivalMemories"), RivalMemories);
     Payload->SetArrayField(TEXT("discoveredLocations"),Ids(Profile.DiscoveredLocations));
     const auto World = MakeShared<FJsonObject>();
     World->SetBoolField(TEXT("recorded"),Profile.World.bRecorded);
@@ -255,6 +271,42 @@ EReadProfile Decode(const FString& Text, const FString& VehicleId, FADGarageProf
         }
     }
     else StoreActiveRecord(Candidate); // All previous schemas described the starter car only.
+    if (Schema >= 6)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+        if (!Array(Root, TEXT("rivalMemories"), Values, 0, MaxRivalMemories, Error)) return EReadProfile::Invalid;
+        TSet<FString> RivalIds;
+        for (const TSharedPtr<FJsonValue>& Value : *Values)
+        {
+            const TSharedPtr<FJsonObject>* Object = nullptr;
+            FADRivalMemory Memory;
+            double Encounters = 0., PlayerWins = 0., RivalWins = 0., Respect = 0., Grudge = 0.;
+            if (!Value.IsValid() || !Value->TryGetObject(Object) || !Object || !Object->IsValid()
+                || !Identifier(*Object, TEXT("rivalId"), Memory.RivalId, Error)
+                || !Identifier(*Object, TEXT("lastChapterId"), Memory.LastChapterId, Error)
+                || !Number(*Object, TEXT("encounters"), 1., MaxRivalEncounters, Encounters, Error)
+                || Encounters != FMath::FloorToDouble(Encounters)
+                || !Number(*Object, TEXT("playerWins"), 0., Encounters, PlayerWins, Error)
+                || PlayerWins != FMath::FloorToDouble(PlayerWins)
+                || !Number(*Object, TEXT("rivalWins"), 0., Encounters, RivalWins, Error)
+                || RivalWins != FMath::FloorToDouble(RivalWins)
+                || PlayerWins + RivalWins != Encounters
+                || !Number(*Object, TEXT("respect"), 0., 1., Respect, Error)
+                || !Number(*Object, TEXT("grudge"), 0., 1., Grudge, Error)
+                || RivalIds.Contains(Memory.RivalId))
+            {
+                if (Error.IsEmpty()) Error = TEXT("Rival history is duplicated or outside its supported bounds.");
+                return EReadProfile::Invalid;
+            }
+            Memory.Encounters = static_cast<int32>(Encounters);
+            Memory.PlayerWins = static_cast<int32>(PlayerWins);
+            Memory.RivalWins = static_cast<int32>(RivalWins);
+            Memory.Respect = static_cast<float>(Respect);
+            Memory.Grudge = static_cast<float>(Grudge);
+            RivalIds.Add(Memory.RivalId);
+            Candidate.RivalMemories.Add(MoveTemp(Memory));
+        }
+    }
     Out = MoveTemp(Candidate);
     return EReadProfile::Valid;
 }
@@ -527,7 +579,8 @@ bool UADOwnershipSubsystem::ValidateProfile(const FADGarageProfile& Candidate, F
     }
     if (Candidate.Reputation<0 || Candidate.Reputation>MaxCredits || Candidate.RaceWins<0
         || Candidate.RacesFinished<Candidate.RaceWins || Candidate.RacesFinished>MaxCredits
-        || Candidate.AwardedRaceIds.Num()>128 || Candidate.CompletedChapters.Num()>32)
+        || Candidate.AwardedRaceIds.Num()>128 || Candidate.CompletedChapters.Num()>32
+        || Candidate.RivalMemories.Num()>MaxRivalMemories)
     { OutError=TEXT("Career counters are invalid."); return false; }
     TSet<FString> Receipts;
     for (const auto& Receipt:Candidate.AwardedRaceIds)
@@ -536,6 +589,30 @@ bool UADOwnershipSubsystem::ValidateProfile(const FADGarageProfile& Candidate, F
         if (!FGuid::ParseExact(Receipt,EGuidFormats::Digits,Parsed) || !Parsed.IsValid() || Receipts.Contains(Receipt))
         { OutError=TEXT("Career receipt list is invalid."); return false; }
         Receipts.Add(Receipt);
+    }
+    TSet<FString> RivalIds;
+    for (const FADRivalMemory& Memory : Candidate.RivalMemories)
+    {
+        const bool bValidId = !Memory.RivalId.IsEmpty() && Memory.RivalId.Len() <= 48
+            && Memory.RivalId == Memory.RivalId.ToLower();
+        const bool bValidChapter = !Memory.LastChapterId.IsEmpty() && Memory.LastChapterId.Len() <= 48
+            && Memory.LastChapterId == Memory.LastChapterId.ToLower();
+        if (!bValidId || !bValidChapter || RivalIds.Contains(Memory.RivalId)
+            || Memory.Encounters < 1 || Memory.Encounters > MaxRivalEncounters
+            || Memory.PlayerWins < 0 || Memory.RivalWins < 0
+            || Memory.PlayerWins + Memory.RivalWins != Memory.Encounters
+            || !FMath::IsFinite(Memory.Respect) || Memory.Respect < 0.f || Memory.Respect > 1.f
+            || !FMath::IsFinite(Memory.Grudge) || Memory.Grudge < 0.f || Memory.Grudge > 1.f)
+        { OutError=TEXT("Rival history contains invalid, duplicate or unbounded values."); return false; }
+        for (const TCHAR Character : Memory.RivalId)
+            if ((Character < TEXT('a') || Character > TEXT('z'))
+                && (Character < TEXT('0') || Character > TEXT('9')) && Character != TEXT('_'))
+            { OutError=TEXT("Rival identifier contains unsupported characters."); return false; }
+        for (const TCHAR Character : Memory.LastChapterId)
+            if ((Character < TEXT('a') || Character > TEXT('z'))
+                && (Character < TEXT('0') || Character > TEXT('9')) && Character != TEXT('_'))
+            { OutError=TEXT("Rival chapter identifier contains unsupported characters."); return false; }
+        RivalIds.Add(Memory.RivalId);
     }
     if (auto* Career=GetGameInstance()->GetSubsystem<UADCareerSubsystem>(); Career && Career->IsReady())
     {
@@ -758,7 +835,14 @@ bool UADOwnershipSubsystem::Commit(const FADGarageProfile& Desired, FString& Out
     return true;
 }
 
-bool UADOwnershipSubsystem::CommitRaceResult(const FString& ReceiptId, const FString& ChapterId, int32 Place, FString& OutError)
+bool UADOwnershipSubsystem::CommitRaceResult(const FString& ReceiptId, const FString& ChapterId, int32 Place,
+    FString& OutError)
+{
+    return CommitRaceResult(ReceiptId, ChapterId, Place, TArray<FADRivalRaceResult>(), OutError);
+}
+
+bool UADOwnershipSubsystem::CommitRaceResult(const FString& ReceiptId, const FString& ChapterId, int32 Place,
+    const TArray<FADRivalRaceResult>& Rivals, FString& OutError)
 {
     OutError.Reset();
     if (!bReady) { OutError=Error; return false; }
@@ -771,6 +855,29 @@ bool UADOwnershipSubsystem::CommitRaceResult(const FString& ReceiptId, const FSt
     auto* Career=GetGameInstance()->GetSubsystem<UADCareerSubsystem>();
     FADCareerReward Reward;
     if (!Career || !Career->ComputeReward(Profile,ChapterId,Place,Reward,OutError)) return false;
+    if (!Rivals.IsEmpty())
+    {
+        if (Rivals.Num() > 15)
+        { OutError=TEXT("Race result contains too many named rivals."); return false; }
+        TSet<FString> RivalIds;
+        TSet<int32> Places;
+        Places.Add(Place);
+        for (const FADRivalRaceResult& Result : Rivals)
+        {
+            if (Result.RivalId.IsEmpty() || Result.RivalId.Len() > 48
+                || Result.RivalId != Result.RivalId.ToLower() || Result.Place < 1 || Result.Place > Rivals.Num() + 1
+                || RivalIds.Contains(Result.RivalId) || Places.Contains(Result.Place))
+            { OutError=TEXT("Career rival classification is duplicated or outside the finalized race places."); return false; }
+            for (const TCHAR Character : Result.RivalId)
+                if ((Character < TEXT('a') || Character > TEXT('z'))
+                    && (Character < TEXT('0') || Character > TEXT('9')) && Character != TEXT('_'))
+                { OutError=TEXT("Career rival ID contains unsupported characters."); return false; }
+            RivalIds.Add(Result.RivalId);
+            Places.Add(Result.Place);
+        }
+        if (Places.Num() != Rivals.Num() + 1)
+        { OutError=TEXT("Career rival classification is incomplete."); return false; }
+    }
     FADGarageProfile Candidate=Profile;
     if (PendingWorld.bRecorded) Candidate.World=PendingWorld;
     Candidate.Credits=FMath::Min(MaxCredits,Candidate.Credits+Reward.Credits);
@@ -778,6 +885,36 @@ bool UADOwnershipSubsystem::CommitRaceResult(const FString& ReceiptId, const FSt
     Candidate.RacesFinished=FMath::Min(MaxCredits,Candidate.RacesFinished+1);
     if (Place==1) Candidate.RaceWins=FMath::Min(MaxCredits,Candidate.RaceWins+1);
     if (Reward.bAdvance) Candidate.CompletedChapters.Add(Reward.ChapterId);
+    for (const FADRivalRaceResult& Result : Rivals)
+    {
+        FADRivalMemory* Memory=Candidate.RivalMemories.FindByPredicate(
+            [&](const FADRivalMemory& Item) { return Item.RivalId==Result.RivalId; });
+        if (!Memory)
+        {
+            if (Candidate.RivalMemories.Num()>=MaxRivalMemories)
+            { OutError=TEXT("Rival history is full; no part of this race result was saved."); return false; }
+            FADRivalMemory NewMemory;
+            NewMemory.RivalId=Result.RivalId;
+            Candidate.RivalMemories.Add(MoveTemp(NewMemory));
+            Memory=&Candidate.RivalMemories.Last();
+        }
+        if (Memory->Encounters>=MaxRivalEncounters)
+        { OutError=TEXT("Rival encounter history reached its supported limit."); return false; }
+        ++Memory->Encounters;
+        Memory->LastChapterId=Reward.ChapterId;
+        if (Place<Result.Place)
+        {
+            ++Memory->PlayerWins;
+            Memory->Respect=FMath::Min(1.f,Memory->Respect+.15f);
+            Memory->Grudge=FMath::Max(0.f,Memory->Grudge-.10f);
+        }
+        else
+        {
+            ++Memory->RivalWins;
+            Memory->Grudge=FMath::Min(1.f,Memory->Grudge+.20f);
+            Memory->Respect=FMath::Max(0.f,Memory->Respect-.05f);
+        }
+    }
     Candidate.AwardedRaceIds.Add(ReceiptId);
     if (Candidate.AwardedRaceIds.Num()>128) Candidate.AwardedRaceIds.RemoveAt(0);
     if (!ValidateProfile(Candidate,OutError) || !WriteProfile(Candidate,OutError)) return false;

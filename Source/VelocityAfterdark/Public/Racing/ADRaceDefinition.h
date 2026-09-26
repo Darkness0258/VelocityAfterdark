@@ -17,12 +17,22 @@ struct FADCheckpoint
     double DistanceM = 0.0;
 };
 
+/** Decision weights only; vehicle grip, torque and braking physics stay identical. */
+struct FADDriverPersonality
+{
+    float OvertakeAggression = .5f;
+    float BrakingConservatism = .5f;
+    float PressureMistakeFrequency = 0.f;
+};
+
 struct FADRaceOpponent
 {
+    FString Id;
     FString Name;
     FLinearColor Color = FLinearColor::White;
     float SpeedScale = 1.0f;
     float LaneOffsetCm = 0.0f;
+    FADDriverPersonality Personality;
 };
 
 // Validated, immutable race content. Runtime state belongs to the race manager.
@@ -30,6 +40,7 @@ struct VELOCITYAFTERDARK_API FADRaceDefinition
 {
     FString Id;
     FString Name;
+    // Zero is an A-to-B point-to-point event; positive values are circuits.
     int32 Laps = 2;
     double CountdownSeconds = 3.0;
     double TimeoutSeconds = 480.0;

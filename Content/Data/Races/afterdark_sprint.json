@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "id": "afterdark_sprint_v1",
+  "name": "Afterdark Avenue Sprint",
+  "laps": 0,
+  "countdownSeconds": 3,
+  "timeoutSeconds": 240,
+  "recoveryPenaltySeconds": 5,
+  "routePoints": [
+    [-40000, 0, 100],
+    [-40000, -25000, 100],
+    [40000, -25000, 100],
+    [40000, 25000, 100],
+    [-40000, 25000, 100],
+    [-40000, 62000, 100],
+    [40000, 62000, 100],
+    [40000, 25000, 100],
+    [82000, 25000, 100],
+    [82000, -24000, 100]
+  ],
+  "checkpoints": [
+    {
+      "location": [-40000, 0, 80],
+      "forward": [0, -1, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 0
+    },
+    {
+      "location": [-40000, -12500, 80],
+      "forward": [0, -1, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 125
+    },
+    {
+      "location": [0, -25000, 80],
+      "forward": [1, 0, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 650
+    },
+    {
+      "location": [40000, 0, 80],
+      "forward": [0, 1, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 1300
+    },
+    {
+      "location": [0, 25000, 80],
+      "forward": [-1, 0, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 1950
+    },
+    {
+      "location": [-40000, 43500, 80],
+      "forward": [0, 1, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 2535
+    },
+    {
+      "location": [0, 62000, 80],
+      "forward": [1, 0, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 3120
+    },
+    {
+      "location": [40000, 43500, 80],
+      "forward": [0, -1, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 3705
+    },
+    {
+      "location": [61000, 25000, 80],
+      "forward": [1, 0, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 4100
+    },
+    {
+      "location": [82000, 0, 80],
+      "forward": [0, -1, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 4560
+    },
+    {
+      "location": [82000, -24000, 80],
+      "forward": [0, -1, 0],
+      "halfWidthCm": 1000,
+      "halfHeightCm": 200,
+      "distanceM": 4800
+    }
+  ],
+  "grid": [
+    [-40750, 600, 90, -90],
+    [-40250, 600, 90, -90],
+    [-39750, 600, 90, -90],
+    [-39250, 600, 90, -90]
+  ],
+  "opponents": [
+    {
+      "id": "rhea_vale",
+      "name": "Rhea Vale",
+      "color": [0.92, 0.19, 0.075],
+      "speedScale": 1.0,
+      "laneOffsetCm": 300,
+      "personality": {
+        "overtakeAggression": 0.86,
+        "brakingConservatism": 0.62,
+        "pressureMistakeFrequency": 0.18
+      }
+    },
+    {
+      "id": "mako_reyes",
+      "name": "Mako Reyes",
+      "color": [0.12, 0.68, 0.78],
+      "speedScale": 0.97,
+      "laneOffsetCm": -300,
+      "personality": {
+        "overtakeAggression": 0.68,
+        "brakingConservatism": 0.32,
+        "pressureMistakeFrequency": 0.28
+      }
+    },
+    {
+      "id": "tess_nouri",
+      "name": "Tess Nouri",
+      "color": [0.56, 0.29, 0.85],
+      "speedScale": 0.94,
+      "laneOffsetCm": 0,
+      "personality": {
+        "overtakeAggression": 0.42,
+        "brakingConservatism": 0.78,
+        "pressureMistakeFrequency": 0.08
+      }
+    }
+  ],
+  "difficultySpeedScales": [0.8, 0.95, 1.08]
+}

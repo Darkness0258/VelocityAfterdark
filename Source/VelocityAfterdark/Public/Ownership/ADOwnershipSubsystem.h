@@ -51,6 +51,25 @@ struct VELOCITYAFTERDARK_API FADOwnedVehicle
     FString TuneId = TEXT("street");
 };
 
+/** Bounded, profile-owned history used to vary future rivalry dialogue. */
+struct VELOCITYAFTERDARK_API FADRivalMemory
+{
+    FString RivalId;
+    FString LastChapterId;
+    int32 Encounters = 0;
+    int32 PlayerWins = 0;
+    int32 RivalWins = 0;
+    float Respect = 0.f;
+    float Grudge = 0.f;
+};
+
+/** A finalized career classification entry from one named opponent. */
+struct VELOCITYAFTERDARK_API FADRivalRaceResult
+{
+    FString RivalId;
+    int32 Place = 0;
+};
+
 struct VELOCITYAFTERDARK_API FADGarageProfile
 {
     FString ActiveVehicleId = TEXT("aster_s6");
@@ -66,6 +85,7 @@ struct VELOCITYAFTERDARK_API FADGarageProfile
     int64 RacesFinished = 0;
     TArray<FString> CompletedChapters;
     TArray<FString> AwardedRaceIds;
+    TArray<FADRivalMemory> RivalMemories;
     TArray<FString> DiscoveredLocations;
     FADWorldSnapshot World;
 };
@@ -104,6 +124,8 @@ public:
     bool Commit(const FADGarageProfile& Desired, FString& OutError);
     // The authoritative race manager submits classification, never a payout.
     bool CommitRaceResult(const FString& ReceiptId, const FString& ChapterId, int32 Place, FString& OutError);
+    bool CommitRaceResult(const FString& ReceiptId, const FString& ChapterId, int32 Place,
+        const TArray<FADRivalRaceResult>& Rivals, FString& OutError);
     // Only the offline world director calls this after checking real vehicle arrival.
     bool CommitDiscovery(const FString& LocationId, FString& OutError);
     // A snapshot is pending until a successful transaction; failed saves never advance the durable state.

@@ -510,7 +510,13 @@
         0.075
       ],
       "speedScale": 1.0,
-      "laneOffsetCm": 300
+      "laneOffsetCm": 300,
+      "id": "dara_quinn",
+      "personality": {
+        "overtakeAggression": 0.58,
+        "brakingConservatism": 0.74,
+        "pressureMistakeFrequency": 0.1
+      }
     },
     {
       "name": "Ansel Ward",
@@ -520,7 +526,13 @@
         0.78
       ],
       "speedScale": 0.97,
-      "laneOffsetCm": -300
+      "laneOffsetCm": -300,
+      "id": "ansel_ward",
+      "personality": {
+        "overtakeAggression": 0.64,
+        "brakingConservatism": 0.48,
+        "pressureMistakeFrequency": 0.14
+      }
     },
     {
       "name": "Mara Ko",
@@ -530,7 +542,13 @@
         0.85
       ],
       "speedScale": 0.94,
-      "laneOffsetCm": 0
+      "laneOffsetCm": 0,
+      "id": "mara_ko",
+      "personality": {
+        "overtakeAggression": 0.46,
+        "brakingConservatism": 0.88,
+        "pressureMistakeFrequency": 0.06
+      }
     }
   ]
 }

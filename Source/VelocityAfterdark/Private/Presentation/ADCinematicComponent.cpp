@@ -86,15 +86,29 @@ bool UADCinematicComponent::Enter(EADCinematicMode Desired)
     }
     Camera->GetCameraComponent()->SetFieldOfView(FMath::Clamp(PC->PlayerCameraManager->GetFOVAngle(),20.f,100.f));
     PhotoExposureOffset=0.f;
+    PhotoFocusDistanceCm=1500.f;
+    PhotoFStop=8.f;
+    PhotoFilterIndex=0;
     PhotoBaseExposure=0.f;
     for (TActorIterator<AADAtmosphere> It(GetWorld()); It; ++It)
     { PhotoBaseExposure=It->GetExposureBias(); break; }
     Camera->GetCameraComponent()->PostProcessSettings.bOverride_AutoExposureBias=true;
     Camera->GetCameraComponent()->PostProcessSettings.AutoExposureBias=PhotoBaseExposure;
+    auto& PhotoSettings=Camera->GetCameraComponent()->PostProcessSettings;
+    PhotoSettings.bOverride_DepthOfFieldFocalDistance=true;
+    PhotoSettings.bOverride_DepthOfFieldFstop=true;
+    PhotoSettings.DepthOfFieldFocalDistance=PhotoFocusDistanceCm;
+    PhotoSettings.DepthOfFieldFstop=PhotoFStop;
+    PhotoSettings.bOverride_ColorSaturation=true;
+    PhotoSettings.bOverride_ColorContrast=true;
+    PhotoSettings.bOverride_ColorGamma=true;
+    ApplyPhotoLook();
     PC->FlushPressedKeys(); PC->SetViewTarget(Camera);
     Mode=Desired; ReplaySeconds=0.; LastWallSeconds=FPlatformTime::Seconds();
     bPlaying=true; bHidden=false;
-    Message=Desired==EADCinematicMode::Photo ? TEXT("PHOTO MODE / [ AND ] EXPOSURE / LEFT STICK + TRIGGERS MOVE") : TEXT("DRIVE REPLAY / VEHICLE ONLY");
+    Message=Desired==EADCinematicMode::Photo
+        ? TEXT("PHOTO MODE / 1-4 LOOK / R-F FOCUS / T-G APERTURE / [ ] EXPOSURE")
+        : TEXT("DRIVE REPLAY / VEHICLE ONLY");
     return true;
 }
 
@@ -199,7 +213,54 @@ void UADCinematicComponent::UpdatePhoto(float Step)
     {
         PhotoExposureOffset=FMath::Clamp(PhotoExposureOffset+ExposureInput*Step,-3.f,3.f);
         Lens->PostProcessSettings.AutoExposureBias=PhotoBaseExposure+PhotoExposureOffset;
-        Message=FString::Printf(TEXT("PHOTO MODE / EXPOSURE %+.1f EV / [ AND ] ADJUST"),PhotoExposureOffset);
+        Message=FString::Printf(TEXT("PHOTO / %s / %.1f EV / F %.0f M / F%.1f"),
+            *FString::FromInt(PhotoFilterIndex+1),PhotoExposureOffset,PhotoFocusDistanceCm*.01f,PhotoFStop);
+    }
+    const int32 RequestedFilter=PC->IsInputKeyDown(EKeys::One) ? 0 : PC->IsInputKeyDown(EKeys::Two) ? 1
+        : PC->IsInputKeyDown(EKeys::Three) ? 2 : PC->IsInputKeyDown(EKeys::Four) ? 3 : INDEX_NONE;
+    if (RequestedFilter!=INDEX_NONE && RequestedFilter!=PhotoFilterIndex)
+    {
+        PhotoFilterIndex=RequestedFilter;
+        ApplyPhotoLook();
+    }
+    const float FocusInput=Key(EKeys::R,EKeys::F);
+    const float ApertureInput=Key(EKeys::G,EKeys::T);
+    PhotoFocusDistanceCm=FMath::Clamp(PhotoFocusDistanceCm+FocusInput*Step*1800.f,300.f,15000.f);
+    PhotoFStop=FMath::Clamp(PhotoFStop+ApertureInput*Step*3.f,1.4f,16.f);
+    Lens->PostProcessSettings.DepthOfFieldFocalDistance=PhotoFocusDistanceCm;
+    Lens->PostProcessSettings.DepthOfFieldFstop=PhotoFStop;
+    if (FocusInput!=0.f || ApertureInput!=0.f || RequestedFilter!=INDEX_NONE)
+        Message=FString::Printf(TEXT("PHOTO / %s / %.1f EV / F %.0f M / F%.1f"),
+            *FString::FromInt(PhotoFilterIndex+1),PhotoExposureOffset,PhotoFocusDistanceCm*.01f,PhotoFStop);
+}
+
+void UADCinematicComponent::ApplyPhotoLook()
+{
+    if (!Camera) return;
+    auto& Settings=Camera->GetCameraComponent()->PostProcessSettings;
+    switch (PhotoFilterIndex)
+    {
+    case 1:
+        Settings.ColorSaturation=FVector4(.86f,.92f,1.f,1.f);
+        Settings.ColorContrast=FVector4(1.06f,1.04f,1.02f,1.f);
+        Settings.ColorGamma=FVector4(1.02f,1.01f,1.f,1.f);
+        break;
+    case 2:
+        Settings.ColorSaturation=FVector4(.08f,.08f,.08f,1.f);
+        Settings.ColorContrast=FVector4(1.12f,1.12f,1.12f,1.f);
+        Settings.ColorGamma=FVector4(1.02f,1.02f,1.02f,1.f);
+        break;
+    case 3:
+        Settings.ColorSaturation=FVector4(1.f,.9f,.76f,1.f);
+        Settings.ColorContrast=FVector4(1.04f,1.02f,1.f,1.f);
+        Settings.ColorGamma=FVector4(1.04f,1.01f,.96f,1.f);
+        break;
+    default:
+        Settings.ColorSaturation=FVector4(1.f,1.f,1.f,1.f);
+        Settings.ColorContrast=FVector4(1.f,1.f,1.f,1.f);
+        Settings.ColorGamma=FVector4(1.f,1.f,1.f,1.f);
+        PhotoFilterIndex=0;
+        break;
     }
 }
 

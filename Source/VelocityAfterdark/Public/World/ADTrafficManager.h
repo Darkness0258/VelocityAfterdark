@@ -27,6 +27,7 @@ public:
     const FString& GetError() const { return Error; }
     bool IsSignalRed() const;
     int32 GetTrafficCount() const { return Cars.Num(); }
+    int32 GetEmergencyYieldCount() const;
 private:
     bool LoadSettings();
     void Populate();
