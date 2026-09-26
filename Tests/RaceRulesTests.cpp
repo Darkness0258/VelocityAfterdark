@@ -111,7 +111,7 @@ void InvalidSamplesAndRecovery()
     Progress State;
     Check(!State.Reset(1, 1), "one-gate circuits rejected");
     Check(!State.Reset(257, 1), "unbounded checkpoint count rejected");
-    Check(!State.Reset(4, 0), "zero laps rejected");
+    Check(!State.Reset(4, -1), "negative lap count rejected");
     Check(!State.Reset(4, 100), "unbounded lap count rejected");
     Check(State.Reset(4, 1), "valid reset after invalid configuration");
     Check(State.Sample({-100, 0, 80}, 0, Gates, 4) == Event::None, "first sample establishes baseline without scoring");
@@ -137,6 +137,24 @@ void InvalidSamplesAndRecovery()
     Check(!State.ResetSample({std::numeric_limits<double>::quiet_NaN(), 0, 0}, 7), "invalid recovery pose rejected");
     Check(!State.ResetSample({0, 0, 0}, std::numeric_limits<double>::infinity()), "invalid recovery time rejected");
     Check(State.Sample({1000, 1100, 80}, 7, Gates, 4) == Event::None, "first valid sample after invalid recovery only establishes baseline");
+}
+
+void PointToPoint()
+{
+    Progress State;
+    Check(State.Reset(4, 0), "zero-lap point-to-point route initialized");
+    Check(Cross(State, 0, 0) == Event::Started, "point-to-point start gate begins the route");
+    Check(Cross(State, 2, 1) == Event::None, "point-to-point route cannot skip its first checkpoint");
+    Check(State.NextCheckpoint == 1, "skipped sprint checkpoint remains required");
+    Check(Cross(State, 1, 2) == Event::Checkpoint, "point-to-point first checkpoint accepted");
+    Check(State.NextCheckpoint == 2, "point-to-point advances to the next checkpoint");
+    Check(Cross(State, 2, 3) == Event::Checkpoint, "point-to-point intermediate checkpoint accepted");
+    Check(State.NextCheckpoint == 3, "point-to-point advances to its finish gate");
+    Check(Cross(State, 3, 4) == Event::Finished, "point-to-point finish gate ends the route");
+    Check(State.Finished && State.CompletedLaps == 0, "point-to-point finish does not invent a lap");
+    Near(State.FinishSeconds, 4.1, "point-to-point finish timestamp is interpolated");
+    Check(Cross(State, 0, 5) == Event::None, "finished point-to-point race cannot restart or score another lap");
+    Check(State.CompletedLaps == 0, "point-to-point route remains a zero-lap result");
 }
 
 void RecoveryInvalidatesBestLap()
@@ -194,6 +212,7 @@ int main()
 {
     GateGeometry();
     OrderedLaps();
+    PointToPoint();
     InvalidSamplesAndRecovery();
     RecoveryInvalidatesBestLap();
     FrameRateIndependentTiming();

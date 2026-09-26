@@ -28,7 +28,7 @@ bool ReadNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, double
         && FMath::IsFinite(Out) && Out >= Minimum && Out <= Maximum;
 }
 
-bool ReadPoint(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, FVector2D& Out)
+bool ReadRoadPointValue(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, FVector2D& Out)
 {
     const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
     double X = 0., Y = 0.;
@@ -63,7 +63,7 @@ bool ReadCatalog(const FString& Path, bool bDistrict, TArray<FADRoadNetworkSegme
     double Schema = 0., Width = 0.;
     if (!ReadNumber(Object, TEXT("schemaVersion"), 1., 1., Schema)
         || !ReadNumber(Object, TEXT("roadWidth"), 1200., 4000., Width)
-        || !ReadPoint(Object, TEXT("groundHalfExtent"), OutBounds)
+        || !ReadRoadPointValue(Object, TEXT("groundHalfExtent"), OutBounds)
         || OutBounds.X < 2000. || OutBounds.Y < 2000. || OutBounds.X > MaximumCoordinateCm || OutBounds.Y > MaximumCoordinateCm)
         return Fail(TEXT("invalid schema, road width or finite ground bounds."));
     FString Units;
@@ -84,7 +84,7 @@ bool ReadCatalog(const FString& Path, bool bDistrict, TArray<FADRoadNetworkSegme
         FString Id;
         FADRoadNetworkSegment Segment;
         if (!IdValue.IsValid() || IdValue->Type != EJson::String || !IdValue->TryGetString(Id) || !ValidId(Id)
-            || Ids.Contains(Id) || !ReadPoint(Road, TEXT("start"), Segment.Start) || !ReadPoint(Road, TEXT("end"), Segment.End))
+            || Ids.Contains(Id) || !ReadRoadPointValue(Road, TEXT("start"), Segment.Start) || !ReadRoadPointValue(Road, TEXT("end"), Segment.End))
             return Fail(TEXT("road IDs must be unique and bounded; endpoints require two finite numbers."));
         if ((Segment.Start.X != Segment.End.X && Segment.Start.Y != Segment.End.Y)
             || (Segment.End - Segment.Start).Size() < 2000.)

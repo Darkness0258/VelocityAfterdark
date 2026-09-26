@@ -1,6 +1,6 @@
 # Integrated development implementation
 
-This describes the source built after Phase 2, not full-roadmap acceptance. On 2026-09-25, the fresh UE 5.8.3 Win64 package passed the 45-case Unreal suite, cooked startup/race/garage checks, four-requested-size render matrix, loopback listen-server/client driving smoke and a 120-second driving benchmark. Reports are linked in `VALIDATION.md`. The rendered city and vehicles are still blockout-level; physical-device, wider-network and AAA content acceptance remain open in `IMPLEMENTATION_QUEUE.md`.
+This describes the source built after Phase 2, not full-roadmap acceptance. On 2026-09-26, the fresh UE 5.8.3 Win64 package passed 46 Unreal cases, 963 vehicle-math checks, 393 race-rule checks, cooked startup/race/garage checks, the four-requested-size render matrix, loopback listen-server/client driving smoke and a 120-second driving benchmark. The fresh report is linked in `VALIDATION.md`. The rendered city and vehicles are still development art; physical-device, wider-network and full-roadmap acceptance remain open in `IMPLEMENTATION_QUEUE.md`.
 
 ## Ownership and world continuity
 

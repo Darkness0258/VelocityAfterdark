@@ -1,8 +1,18 @@
 # Validation evidence
 
+## Full prepared acceptance run — 2026-09-26 (current Windows package)
+
+`Scripts/Test-PreparedSuite.ps1 -IncludeDrivingBenchmark` passed all ten stages in `Artifacts/Consolidated/20260926T183252Z-ac3fce9e/report.json`. The report carries the matching package build proof and runtime source manifest. Fresh source validation covered 154 project text files; portable vehicle math passed 963 checks; portable race rules passed 393 checks, including ordered zero-lap point-to-point completion; all 46 Unreal automation cases passed.
+
+The cooked checks passed startup/data/camera smoke, four requested viewport sizes, a two-lap physical race, garage purchase/configuration persistence across two launches, and a packaged loopback host/client driving and telemetry/disconnect smoke. All four race cars finished without recovery or DNF. The 120-second race capture averaged 79.8 FPS, with 27 frames above 33.33 ms and a 78.796 ms worst frame. The separate 120-second driving capture covered 2,295.95 m, averaged 94.76 FPS, had a 12.571 ms p95 frame time, a 99.11 ms worst frame, 15 frames above 33.33 ms, and a 251.812 MB reported local GPU-memory peak. These are bounded offscreen DX11 measurements on the recorded machine, not a sustained 60 FPS or whole-world performance certification.
+
+The 800×600 and 1280×720 captures rendered at their requested dimensions. Requests for 1920×1080 and 2560×1440 were internally scaled to 888×500 by the offscreen renderer; these runs do not verify native high-resolution output, physical displays, fullscreen/HDR, or another GPU. The multiplayer result covers one client on loopback only; physical controllers/wheels, internet conditions, full-world soak, subjective handling/audio/art review and the unimplemented production scope remain open. `fullRoadmapAccepted` is intentionally false in the report.
+
+During this audit the portable race suite exposed an obsolete assertion that rejected zero laps. It now tests sprint gate order and finish behavior. A fresh Unreal build also exposed a unity-build helper-name collision between road-network and regional-world translation units; the helper was renamed, then the Editor/Game targets and package were rebuilt before this passing report.
+
 ## Visual presentation package — 2026-09-26
 
-The current Windows package was rebuilt after the HUD, camera, lighting and district-material changes. `Artifacts/build-proof.json` records the current executable SHA-256 and package container hashes. Its acceptance scope is C++/UHT build, cook/stage/archive, and runtime asset inclusion; the earlier consolidated gameplay report below belongs to the prior executable.
+The Windows package was rebuilt after the HUD, camera, lighting and district-material changes. `Artifacts/build-proof.json` records the current executable SHA-256 and package container hashes. The complete prepared gameplay run against that package is recorded above; this package record by itself only establishes build, cook/stage/archive and runtime asset inclusion.
 
 `Scripts/Smoke-Package.ps1 -PackageDirectory Artifacts/Package/Windows -OutputName VisualPolishPackageSmoke` launched the cooked build, loaded the district data, instantiated three parked background cars, requested fresh title/chase/hood/cockpit captures, logged `AFTERDARK_RENDER_SMOKE_COMPLETE`, and exited cleanly. See `Artifacts/VisualPolishPackageSmoke/runtime.log` and the four PNG captures in that directory. The capture inspection confirms the updated HUD and camera composition, but the procedural city and player car remain blockout art. This smoke does not repeat the full gameplay, multiplayer, device or performance matrix.
 
@@ -32,7 +42,7 @@ The following report entries describe earlier builds unless explicitly identifie
 
 2026-09-20 previous Windows executable SHA-256: `AB680ED248248532CD32D23EF11621F4883BFDA192D63006B193B844F8DC0461`.
 
-The earlier Phase 2 record is preserved as `Artifacts/phase2-build-proof.json`. **The PASS rows and runtime measurements in the historical tables below apply to previous executables, not the current source checkpoint.** Prepared engine cases have since grown to the 45-case suite reported above. See `IMPLEMENTATION_QUEUE.md`, `INTEGRATED_SYSTEMS.md` and `CONSOLIDATED_TEST_PLAN.md` for current scope and remaining gates.
+The earlier Phase 2 record is preserved as `Artifacts/phase2-build-proof.json`. **The PASS rows and runtime measurements in the historical tables below apply to previous executables, not the current source checkpoint.** The latest source checkpoint has 46 prepared Unreal cases; see the fresh report at the top and `IMPLEMENTATION_QUEUE.md`, `INTEGRATED_SYSTEMS.md` and `CONSOLIDATED_TEST_PLAN.md` for scope and remaining gates.
 
 Historical table below, updated 2026-09-19 (local time). Phase 2 extended the tested Phase 1 foundation at that time. This file records actual checks; it is not a release certificate.
 
@@ -67,7 +77,7 @@ These are straight-line tests in the real generated district using the actual Ch
 
 Acceleration samples agree within 0.7% across these three runs (gate: 5%). This is one straight-line maneuver; it does not establish frame-rate invariance for drifting, impacts or suspension over rough ground. Tire contacts still update once per game frame while Chaos integrates substeps.
 
-At the time this historical 21-case report was recorded, the input test used Unreal's simulated key events through the actual player controller and Enhanced Input mappings; it did not certify a physical gamepad. The current 45-case export is listed at the top of this document. Logs: `Artifacts/build-editor.log`, `Artifacts/bootstrap.log`, `Artifacts/automation-engine.log`.
+At the time this historical 21-case report was recorded, the input test used Unreal's simulated key events through the actual player controller and Enhanced Input mappings; it did not certify a physical gamepad. The current 46-case export is listed at the top of this document. Logs: `Artifacts/build-editor.log`, `Artifacts/bootstrap.log`, `Artifacts/automation-engine.log`.
 
 ## Phase 2 race completion
 

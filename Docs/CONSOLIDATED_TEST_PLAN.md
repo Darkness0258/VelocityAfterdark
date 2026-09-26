@@ -1,6 +1,6 @@
 # Consolidated acceptance
 
-The prepared integration batch passed on 2026-09-25 against the package recorded in `Artifacts/build-proof.json`. The full prepared-run report is `Artifacts/Consolidated/20260925T143116Z-a87e22b8/report.json`; this does not mark the full game roadmap accepted. The sections below list remaining validation and production work. Repeat all packaged checks after changing runtime source or content.
+The latest prepared integration batch passed on 2026-09-26 against the package recorded in `Artifacts/build-proof.json`. Its report is `Artifacts/Consolidated/20260926T183252Z-ac3fce9e/report.json`; all ten prepared stages passed, but the report does not mark the full game roadmap accepted. The sections below list remaining validation and production work. Repeat packaged checks after changing runtime source or content.
 
 ## Automated cases already prepared
 
@@ -14,7 +14,7 @@ The existing 21 engine cases and portable vehicle/race assertions remain require
 - Data.RoadNetwork: crossings, T-junctions, overlapping roads, same-edge projections, disconnected/far queries, rejected-reload preservation and routes to every production discovery.
 - Ownership.WorldProgress: world-state round trip, one-time discovery rewards, unknown IDs, garage preservation of discoveries/world state, invalid snapshots and failed-write rollback.
 
-The current suite requires **45 engine cases**. Added coverage includes race catalog validation and ordered career progression; per-vehicle ownership, schema migration and rollback; a purchased vehicle driven with normal keyboard input; input rebinding, settings apply/cancel and UI coordinate scaling; living-world weather/traffic/pursuit integration; photo/replay return state; and seven full physical regional races with three opponents, directed gates, no DNF/recovery, legal results and cleanup. These bounded fixtures do not replace the remaining visual/device/network/soak checks below.
+The current suite requires **46 engine cases**. The portable race suite now includes zero-lap sprint progression and passes 393 assertions. Unreal coverage includes race catalog validation and ordered career progression; per-vehicle ownership, schema migration and rollback; a purchased vehicle driven with normal keyboard input; input rebinding, settings apply/cancel and UI coordinate scaling; living-world weather/traffic/pursuit integration; photo/replay return state; and eight full physical regional races with three opponents, directed gates, no DNF/recovery, legal results and cleanup. These bounded fixtures do not replace the remaining visual/device/network/soak checks below.
 
 `Smoke-Garage.ps1` launches two isolated processes, checks persistence and actual physical configuration on reload, captures stock/custom/reloaded garage images and records a bounded garage CSV. The test never uses the normal player profile.
 
