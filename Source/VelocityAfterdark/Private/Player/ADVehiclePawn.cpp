@@ -285,7 +285,9 @@ void AADVehiclePawn::BuildVehicle()
     UMaterialInterface* Paint = LoadSurface(TEXT("/Game/Velocity/Materials/M_Paint.M_Paint"), FLinearColor(0.04f, 0.21f, 0.25f), 0.8f);
     UMaterialInterface* Glass = LoadSurface(TEXT("/Game/Velocity/Materials/M_Glass.M_Glass"), FLinearColor(0.012f, 0.025f, 0.04f));
     UMaterialInterface* Rubber = LoadSurface(TEXT("/Game/Velocity/Materials/M_Rubber.M_Rubber"), FLinearColor(0.01f, 0.012f, 0.015f));
+    UMaterialInterface* TireRubber = LoadSurface(TEXT("/Game/Velocity/Materials/M_Rubber_PBR.M_Rubber_PBR"), FLinearColor(0.018f, 0.020f, 0.023f));
     UMaterialInterface* Metal = LoadSurface(TEXT("/Game/Velocity/Materials/M_Metal.M_Metal"), FLinearColor(0.35f, 0.4f, 0.45f), 0.9f);
+    UMaterialInterface* WheelMetal = LoadSurface(TEXT("/Game/Velocity/Materials/M_IndustrialMetal_PBR.M_IndustrialMetal_PBR"), FLinearColor(0.35f, 0.4f, 0.45f), 0.9f);
     UMaterialInterface* White = LoadSurface(TEXT("/Game/Velocity/Materials/M_EmissiveWhite.M_EmissiveWhite"), FLinearColor(1, 1, 1));
     UMaterialInterface* Red = LoadSurface(TEXT("/Game/Velocity/Materials/M_EmissiveRed.M_EmissiveRed"), FLinearColor(0.8f, 0.01f, 0.01f));
 
@@ -386,12 +388,12 @@ void AADVehiclePawn::BuildVehicle()
         Pivot->RegisterComponent();
         WheelPivots.Add(Pivot);
         UStaticMeshComponent* Tire = AddPiece(FName(*FString::Printf(TEXT("Tire%d"),I)), FVector::ZeroVector,
-            FVector(.68,.68,.24), Rubber,true,FRotator(0,0,90));
+            FVector(.68,.68,.24), TireRubber,true,FRotator(0,0,90));
         Tire->AttachToComponent(Pivot,FAttachmentTransformRules::KeepRelativeTransform);
         for (int32 Face : {-1,1})
         {
             UStaticMeshComponent* Rim = AddPiece(FName(*FString::Printf(TEXT("Rim%d_%d"),I,Face)),
-                FVector(0,Face*12.1,0),FVector(.49,.49,.025),Metal,true,FRotator(0,0,90));
+                FVector(0,Face*12.1,0),FVector(.49,.49,.025),WheelMetal,true,FRotator(0,0,90));
             Rim->AttachToComponent(Pivot,FAttachmentTransformRules::KeepRelativeTransform);
             for (int32 Spoke = 0; Spoke < 5; ++Spoke)
             {

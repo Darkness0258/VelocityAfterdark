@@ -5,7 +5,6 @@
 #include "ADGarage.generated.h"
 
 class AADVehiclePawn;
-class AADAtmosphere;
 class UCameraComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
@@ -56,7 +55,6 @@ private:
     UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> Surfaces;
     UPROPERTY(Transient) TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> Batches;
     TWeakObjectPtr<AADVehiclePawn> Occupant;
-    TWeakObjectPtr<AADAtmosphere> Atmosphere;
     TArray<FStudioLight> StudioLights;
     FTransform ReturnTransform;
     bool bReturnDriving = false;
@@ -69,5 +67,4 @@ private:
     float CurrentPitch = 14.f;
     float TargetDistance = 830.f;
     float CurrentDistance = 830.f;
-    float AppliedExposureBias = MAX_flt;
 };

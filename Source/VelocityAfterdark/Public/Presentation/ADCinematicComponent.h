@@ -42,6 +42,9 @@ public:
     float GetStorySeconds() const { return StorySeconds; }
     double GetReplaySeconds() const { return ReplaySeconds; }
     double GetReplayDuration() const;
+    int32 GetStoryShotIndex() const;
+    float GetStoryProgress() const;
+    FTransform GetCinematicCameraTransform() const;
     // Call before an explicit reset, race-grid placement or other teleport.
     // A motion/timestamp guard also protects callers that cannot notify us.
     void NotifyRecordingDiscontinuity();
@@ -87,7 +90,7 @@ private:
     FString Message;
     FString StoryTitle,StoryAttribution,StoryNarrative,StoryClosing;
     float StorySeconds=0.f;
-    static constexpr float StoryDurationSeconds=9.5f;
+    static constexpr float StoryDurationSeconds=14.f;
     static constexpr int32 SampleCapacity=1200;
     static constexpr double MaximumReplaySeconds=60.;
     static constexpr double MaximumSampleGapSeconds=.25;

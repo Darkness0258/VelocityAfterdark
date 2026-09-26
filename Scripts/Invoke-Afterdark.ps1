@@ -76,10 +76,16 @@ switch ($Action) {
             throw 'UE did not report a successful Poly Haven asphalt import.'
         }
         $generatedContent = Join-Path $projectRoot 'Content\Velocity\Materials'
-        foreach ($asset in @('M_Asphalt_Smooth.uasset','M_Concrete_PBR.uasset','M_Building_PBR.uasset',
+        foreach ($asset in @('M_Asphalt_Smooth_V3.uasset','M_Concrete_PBR_V3.uasset','M_Building_PBR_V3.uasset',
+                'M_IndustrialMetal_PBR.uasset','M_Rubber_PBR.uasset',
                 'Generated\T_Asphalt_Surface_V2.uasset','Generated\T_Asphalt_Normal_V2.uasset',
                 'Generated\T_Concrete_Surface_V2.uasset','Generated\T_Concrete_Normal_V2.uasset',
-                'Generated\T_Facade_Surface_V2.uasset','Generated\T_Facade_Normal_V2.uasset')) {
+                'Generated\T_Facade_Surface_V2.uasset','Generated\T_Facade_Normal_V2.uasset',
+                'Generated\T_Asphalt_Surface_V3.uasset','Generated\T_Asphalt_Normal_V3.uasset',
+                'Generated\T_Concrete_Surface_V3.uasset','Generated\T_Concrete_Normal_V3.uasset',
+                'Generated\T_Facade_Surface_V3.uasset','Generated\T_Facade_Normal_V3.uasset',
+                'Generated\T_IndustrialMetal_Surface_V3.uasset','Generated\T_IndustrialMetal_Normal_V3.uasset',
+                'Generated\T_Rubber_Surface_V3.uasset','Generated\T_Rubber_Normal_V3.uasset')) {
             if (-not (Test-Path -LiteralPath (Join-Path $generatedContent $asset))) {
                 throw "PBR material build did not create $asset"
             }
@@ -93,7 +99,7 @@ switch ($Action) {
                 throw "Poly Haven asphalt import did not create $asset"
             }
         }
-        Write-Host 'AFTERDARK_VISUAL_ASSETS_OK: wettable Poly Haven asphalt, three district materials and nine PBR textures.'
+        Write-Host 'AFTERDARK_VISUAL_ASSETS_OK: wettable Poly Haven asphalt, five updated PBR materials and sixteen generated surface maps.'
     }
     'Open' {
         $mapFile = Join-Path $projectRoot 'Content\Velocity\Maps\L_Dockside.umap'
@@ -152,7 +158,7 @@ switch ($Action) {
         $renderStarted = Get-Date
         $renderArguments = @(('"{0}"' -f $projectFile),'/Game/Velocity/Maps/L_Dockside',
             '-game','-windowed','-ResX=1280','-ResY=720','-d3d11','-RenderOffscreen',
-            '-unattended','-nosplash','-AfterdarkRenderSmoke','-AfterdarkSmokeExit',
+            '-unattended','-nosplash','-AfterdarkEnvironment','-AfterdarkRenderSmoke','-AfterdarkSmokeExit',
             '-csvCompression=0','"-ExecCmds=DisableAllScreenMessages"',('"-abslog={0}"' -f $renderLog))
         $renderProcess = Start-Process -FilePath $editor -ArgumentList $renderArguments -WindowStyle Hidden -PassThru
         if (-not $renderProcess.WaitForExit(300000)) {
@@ -164,15 +170,20 @@ switch ($Action) {
         }
         $renderOutput = Join-Path $artifactRoot 'Render'
         New-Item -ItemType Directory -Path $renderOutput -Force | Out-Null
-        foreach ($camera in @('Title','Chase','Hood','Cockpit')) {
+        foreach ($camera in @('Title','Chase','Hood','Cockpit','Arrival01','Arrival02','Arrival03','Arrival04')) {
             $capture = Join-Path $projectRoot "Saved\Smoke\Afterdark$camera.png"
             if (-not (Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).LastWriteTime -lt $renderStarted) {
                 throw "A fresh $camera capture was not produced. Inspect $renderLog"
             }
             Copy-Item -LiteralPath $capture -Destination $renderOutput -Force
         }
-        Write-Host "AFTERDARK_RENDER_CAPTURE_OK: four camera captures in $renderOutput. Visual inspection is still required."
-    }
+            Copy-Item -LiteralPath $capture -Destination $renderOutput -Force
+        }
+        $renderLog = Join-Path $artifactRoot 'render-smoke.log'
+        if (-not (Select-String -LiteralPath $renderLog -SimpleMatch 'AFTERDARK_CUTSCENE_SMOKE_COMPLETE' -Quiet)) {
+            throw 'The packaged-style arrival cutscene did not complete with a live, driveable vehicle.'
+        }
+        Write-Host "AFTERDARK_RENDER_CAPTURE_OK: four driving views and four moving cutscene shots in $renderOutput."
     'Package' {
         $mapFile = Join-Path $projectRoot 'Content\Velocity\Maps\L_Dockside.umap'
         if (-not (Test-Path -LiteralPath $mapFile)) { throw 'Run -Action Bootstrap before packaging.' }
@@ -200,6 +211,11 @@ switch ($Action) {
             'VelocityAfterdark/Content/Velocity/Materials/M_Asphalt_Smooth.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/M_Building_PBR.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/M_Concrete_PBR.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/M_Asphalt_Smooth_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/M_Building_PBR_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/M_Concrete_PBR_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/M_IndustrialMetal_PBR.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/M_Rubber_PBR.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Surface_V2.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Surface_V2.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Surface_V2.uasset',
@@ -209,9 +225,29 @@ switch ($Action) {
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Surface_V2.ubulk',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Surface_V2.ubulk',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Surface_V2.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Surface_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Surface_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Surface_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_IndustrialMetal_Surface_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Rubber_Surface_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Normal_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Normal_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Normal_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_IndustrialMetal_Normal_V3.uasset',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Rubber_Normal_V3.uasset',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Normal_V2.ubulk',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Normal_V2.ubulk',
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Normal_V2.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Surface_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Surface_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Surface_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_IndustrialMetal_Surface_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Rubber_Surface_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Asphalt_Normal_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Concrete_Normal_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Normal_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_IndustrialMetal_Normal_V3.ubulk',
+            'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Rubber_Normal_V3.ubulk',
             'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Diffuse_2K.ubulk',
             'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_NormalDX_2K.ubulk',
             'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Roughness_2K.ubulk',

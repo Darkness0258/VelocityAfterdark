@@ -213,6 +213,41 @@ private:
             Test->TestTrue(TEXT("Replay restores chassis and force simulation"),Chassis->IsSimulatingPhysics() && Car->GetPhysics()->IsComponentTickEnabled());
             Cinematic->NotifyRecordingDiscontinuity();
             Test->TestFalse(TEXT("Recovery cannot replay across a teleport"),Cinematic->EnterReplay());
+            if (!Test->TestTrue(TEXT("Arrival story sequence starts"),Cinematic->PlayArrivalCutscene()))
+            { Test->AddError(Cinematic->GetMessage()); return true; }
+            Test->TestFalse(TEXT("Story presentation keeps the city simulation running"),PC->IsPaused());
+            Test->TestFalse(TEXT("Story presentation suspends player vehicle controls"),Car->IsDrivingEnabled());
+            Test->TestFalse(TEXT("Story presentation holds the player chassis safely"),Chassis->IsSimulatingPhysics());
+            Test->TestFalse(TEXT("Story presentation suspends tire-force updates"),Car->GetPhysics()->IsComponentTickEnabled());
+            StoryCameraStart=Cinematic->GetCinematicCameraTransform();
+            StoryVehicleStart=Car->GetActorTransform();
+            StoryWorldStart=World->GetTimeSeconds();
+            StoryWallStart=FPlatformTime::Seconds();
+            Stage=4; StageTime=StoryWallStart; return false;
+        }
+        if (Stage==4 && FPlatformTime::Seconds()-StageTime>=1.25)
+        {
+            const FTransform CurrentCamera=Cinematic->GetCinematicCameraTransform();
+            Test->TestTrue(TEXT("Realtime story camera travels through the opening shot"),
+                FVector::Dist(StoryCameraStart.GetLocation(),CurrentCamera.GetLocation())>100.f);
+            Test->TestTrue(TEXT("World time advances behind the moving cutscene"),World->GetTimeSeconds()>StoryWorldStart+.8);
+            Test->TestTrue(TEXT("Cinematic freeze holds vehicle pose while the city moves"),Car->GetActorTransform().Equals(StoryVehicleStart,.01));
+            Test->TestEqual(TEXT("Arrival begins on its first authored camera shot"),Cinematic->GetStoryShotIndex(),1);
+            Stage=5; StageTime=FPlatformTime::Seconds(); return false;
+        }
+        if (Stage==5 && FPlatformTime::Seconds()-StageTime>=4.0)
+        {
+            Test->TestTrue(TEXT("Story cutscene progresses to a second camera shot"),Cinematic->GetStoryShotIndex()>=2);
+            Stage=6; return false;
+        }
+        if (Stage==6 && FPlatformTime::Seconds()-StoryWallStart>=14.5)
+        {
+            Test->TestFalse(TEXT("Arrival story sequence completes without input"),Cinematic->IsActive());
+            Test->TestFalse(TEXT("Story completion leaves the world unpaused"),PC->IsPaused());
+            Test->TestTrue(TEXT("Story completion restores vehicle physics and force updates"),
+                Chassis->IsSimulatingPhysics() && Car->GetPhysics()->IsComponentTickEnabled());
+            Test->TestTrue(TEXT("Story completion restores driving controls"),Car->IsDrivingEnabled());
+            Test->TestTrue(TEXT("Story completion preserves the original vehicle pose"),Car->GetActorTransform().Equals(StoryVehicleStart,.01));
             return true;
         }
         return false;
@@ -221,8 +256,11 @@ private:
     bool bWorld=false,bFixed=false,bPreviousFixed=false;
     double Deadline=0,PreviousStep=0,StageTime=0;
     double PausedTime=0;
+    double StoryWorldStart=0.;
+    double StoryWallStart=0.;
     int32 Stage=0;
     FTransform ReturnPose;
+    FTransform StoryCameraStart,StoryVehicleStart;
     FVector ReturnVelocity;
     TMap<TWeakObjectPtr<AADVehiclePawn>,FVector> UnitStarts;
 };

@@ -73,6 +73,7 @@ void AADHUD::DrawHUD()
             Panel(78,78,54,3,Accent);
             Label(TEXT("VELOCITY  /  AFTERDARK"),78,31,.68f,Muted);
             Label(Cinematic->GetStoryTitle(),78,87,1.18f,White);
+            Label(FString::Printf(TEXT("SHOT %02d  /  04"),Cinematic->GetStoryShotIndex()),1510,87,.68f,Accent);
             Label(Cinematic->GetStoryAttribution(),92,896,.73f,Accent);
             TArray<FString> Words; Cinematic->GetStorySubtitle().ParseIntoArray(Words,TEXT(" "),true);
             FString Line; TArray<FString> Lines;
@@ -84,6 +85,8 @@ void AADHUD::DrawHUD()
             if (!Line.IsEmpty()) Lines.Add(Line.TrimEnd());
             const int32 LineCount=FMath::Min(2,Lines.Num());
             for (int32 Index=0;Index<LineCount;++Index) Label(Lines[Index],92,936.f+Index*31.f,.9f,White);
+            Panel(92,1069,1736,3,FLinearColor(.22f,.27f,.30f));
+            Panel(92,1069,1736*Cinematic->GetStoryProgress(),3,Accent);
             Label(TEXT("ENTER / ESC  ·  SKIP SEQUENCE"),1510,1025,.62f,Muted);
             return;
         }

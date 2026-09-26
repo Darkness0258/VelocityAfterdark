@@ -26,6 +26,16 @@ TEXTURES = {
     "T_Concrete_Normal_V2": ("T_Concrete_Normal_V2.png", unreal.TextureCompressionSettings.TC_NORMALMAP),
     "T_Facade_Surface_V2": ("T_Facade_Surface_V2.png", unreal.TextureCompressionSettings.TC_DEFAULT),
     "T_Facade_Normal_V2": ("T_Facade_Normal_V2.png", unreal.TextureCompressionSettings.TC_NORMALMAP),
+    "T_Asphalt_Surface_V3": ("T_Asphalt_Surface_V3.png", unreal.TextureCompressionSettings.TC_DEFAULT),
+    "T_Asphalt_Normal_V3": ("T_Asphalt_Normal_V3.png", unreal.TextureCompressionSettings.TC_NORMALMAP),
+    "T_Concrete_Surface_V3": ("T_Concrete_Surface_V3.png", unreal.TextureCompressionSettings.TC_DEFAULT),
+    "T_Concrete_Normal_V3": ("T_Concrete_Normal_V3.png", unreal.TextureCompressionSettings.TC_NORMALMAP),
+    "T_Facade_Surface_V3": ("T_Facade_Surface_V3.png", unreal.TextureCompressionSettings.TC_DEFAULT),
+    "T_Facade_Normal_V3": ("T_Facade_Normal_V3.png", unreal.TextureCompressionSettings.TC_NORMALMAP),
+    "T_IndustrialMetal_Surface_V3": ("T_IndustrialMetal_Surface_V3.png", unreal.TextureCompressionSettings.TC_DEFAULT),
+    "T_IndustrialMetal_Normal_V3": ("T_IndustrialMetal_Normal_V3.png", unreal.TextureCompressionSettings.TC_NORMALMAP),
+    "T_Rubber_Surface_V3": ("T_Rubber_Surface_V3.png", unreal.TextureCompressionSettings.TC_DEFAULT),
+    "T_Rubber_Normal_V3": ("T_Rubber_Normal_V3.png", unreal.TextureCompressionSettings.TC_NORMALMAP),
 }
 
 
@@ -103,7 +113,7 @@ def make_surface_material(name, base_color, surface_texture, normal_texture, til
             raise RuntimeError(f"Asset path is occupied by a non-material: {path}")
         expressions = unreal.MaterialEditingLibrary.get_material_expressions(existing)
         expression_types = {node.get_class().get_name() for node in expressions}
-        minimum_expressions = 8 if normal_texture else 7
+        minimum_expressions = 10 if normal_texture else 9
         if (len(expressions) < minimum_expressions or "MaterialExpressionTextureCoordinate" not in expression_types
                 or "MaterialExpressionTextureSampleParameter2D" not in expression_types
                 or "MaterialExpressionComponentMask" not in expression_types):
@@ -136,7 +146,13 @@ def make_surface_material(name, base_color, surface_texture, normal_texture, til
     checked(unreal.MaterialEditingLibrary.connect_material_property(
         tint, "", unreal.MaterialProperty.MP_BASE_COLOR), f"Could not connect base color for {name}")
 
-    roughness = channel(material, surface, "g", 100)
+    roughness_data = channel(material, surface, "g", 100)
+    roughness_scale = expression(material, unreal.MaterialExpressionScalarParameter, -200, 170)
+    roughness_scale.set_editor_property("parameter_name", "Roughness")
+    roughness_scale.set_editor_property("default_value", 1.0)
+    roughness = expression(material, unreal.MaterialExpressionMultiply, 80, 120)
+    connect(roughness_data, roughness, "A")
+    connect(roughness_scale, roughness, "B")
     checked(unreal.MaterialEditingLibrary.connect_material_property(
         roughness, "", unreal.MaterialProperty.MP_ROUGHNESS), f"Could not connect roughness for {name}")
 
@@ -197,12 +213,16 @@ def main():
     imported = {name: import_texture(name, *spec) for name, spec in TEXTURES.items()}
     # Keep the wet carriageway's micro-normal response flat at this camera
     # distance; PBR roughness and restrained albedo grain carry the surface.
-    make_surface_material("M_Asphalt_Smooth", (0.048, 0.054, 0.059), imported["T_Asphalt_Surface_V2"],
-                          None, (12.0, 5.0), 0.0)
-    make_surface_material("M_Concrete_PBR", (0.20, 0.215, 0.22), imported["T_Concrete_Surface_V2"],
-                          imported["T_Concrete_Normal_V2"], (7.0, 7.0), 0.0)
-    make_surface_material("M_Building_PBR", (0.085, 0.105, 0.12), imported["T_Facade_Surface_V2"],
-                          imported["T_Facade_Normal_V2"], (8.0, 12.0), 0.08)
+    make_surface_material("M_Asphalt_Smooth_V3", (0.048, 0.054, 0.059), imported["T_Asphalt_Surface_V3"],
+                          imported["T_Asphalt_Normal_V3"], (12.0, 5.0), 0.0)
+    make_surface_material("M_Concrete_PBR_V3", (0.20, 0.215, 0.22), imported["T_Concrete_Surface_V3"],
+                          imported["T_Concrete_Normal_V3"], (7.0, 7.0), 0.0)
+    make_surface_material("M_Building_PBR_V3", (0.085, 0.105, 0.12), imported["T_Facade_Surface_V3"],
+                          imported["T_Facade_Normal_V3"], (8.0, 12.0), 0.08)
+    make_surface_material("M_IndustrialMetal_PBR", (0.18, 0.21, 0.24), imported["T_IndustrialMetal_Surface_V3"],
+                          imported["T_IndustrialMetal_Normal_V3"], (8.0, 8.0), 0.78)
+    make_surface_material("M_Rubber_PBR", (0.025, 0.028, 0.032), imported["T_Rubber_Surface_V3"],
+                          imported["T_Rubber_Normal_V3"], (10.0, 4.0), 0.0)
     enable_parked_car_instancing()
     unreal.log("AFTERDARK_VISUAL_MATERIALS_READY: six small PBR maps and three instanced district materials")
 

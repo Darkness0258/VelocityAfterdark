@@ -74,10 +74,10 @@ AADDistrict::AADDistrict()
         TEXT("/Game/Velocity/Materials/M_Asphalt_PolyHaven.M_Asphalt_PolyHaven"));
     if (AsphaltMaterial.Succeeded()) DetailedAsphaltMaterial = AsphaltMaterial.Object;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> BuildingMaterial(
-        TEXT("/Game/Velocity/Materials/M_Building_PBR.M_Building_PBR"));
+        TEXT("/Game/Velocity/Materials/M_Building_PBR_V3.M_Building_PBR_V3"));
     if (BuildingMaterial.Succeeded()) DetailedBuildingMaterial = BuildingMaterial.Object;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> ConcreteMaterial(
-        TEXT("/Game/Velocity/Materials/M_Concrete_PBR.M_Concrete_PBR"));
+        TEXT("/Game/Velocity/Materials/M_Concrete_PBR_V3.M_Concrete_PBR_V3"));
     if (ConcreteMaterial.Succeeded()) DetailedConcreteMaterial = ConcreteMaterial.Object;
     Atmosphere = CreateDefaultSubobject<USkyAtmosphereComponent>(TEXT("Atmosphere"));
     Atmosphere->SetupAttachment(RootComponent);

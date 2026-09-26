@@ -3,6 +3,8 @@
 #if !UE_BUILD_SHIPPING
 #include "Player/ADPlayerController.h"
 #include "Player/ADVehiclePawn.h"
+#include "Presentation/ADCinematicComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
 #include "HAL/FileManager.h"
@@ -47,9 +49,34 @@ void ADStartRenderSmoke(UWorld* World)
     Later(31.f, NextCamera);
     Later(34.f, [Capture]() { Capture(TEXT("AfterdarkCockpit.png")); });
     Later(36.f, [Controller]() { if (auto* PC = Controller()) PC->ConsoleCommand(TEXT("CsvProfile STOP"), false); });
-    Later(40.f, []()
+    const TSharedRef<bool> bStoryStarted = MakeShared<bool>(false);
+    Later(37.f, [Controller,bStoryStarted]()
     {
+        if (auto* PC = Controller())
+        {
+            *bStoryStarted=PC->GetCinematic() && PC->GetCinematic()->PlayArrivalCutscene();
+            if (!*bStoryStarted) UE_LOG(LogTemp,Error,TEXT("AFTERDARK_CUTSCENE_START_FAILED"));
+        }
+    });
+    Later(39.f, [Capture]() { Capture(TEXT("AfterdarkArrival01.png")); });
+    Later(42.f, [Capture]() { Capture(TEXT("AfterdarkArrival02.png")); });
+    Later(46.f, [Capture]() { Capture(TEXT("AfterdarkArrival03.png")); });
+    Later(50.f, [Capture]() { Capture(TEXT("AfterdarkArrival04.png")); });
+    Later(54.f, [Controller,bStoryStarted]()
+    {
+        auto* PC=Controller();
+        auto* Car=PC ? PC->GetVehiclePawn() : nullptr;
+        auto* Chassis=Car ? Cast<UPrimitiveComponent>(Car->GetRootComponent()) : nullptr;
+        const bool bComplete=*bStoryStarted && PC && Car && PC->GetCinematic()
+            && !PC->GetCinematic()->IsActive() && !PC->IsPaused()
+            && Car->IsDrivingEnabled() && Chassis && Chassis->IsSimulatingPhysics()
+            && Car->GetPhysics()->IsComponentTickEnabled();
+        if (bComplete) UE_LOG(LogTemp,Display,TEXT("AFTERDARK_CUTSCENE_SMOKE_COMPLETE: four animated arrival shots and safe return to driving"));
+        else UE_LOG(LogTemp,Error,TEXT("AFTERDARK_CUTSCENE_SMOKE_FAILED: sequence did not finish in a driveable state"));
         UE_LOG(LogTemp, Display, TEXT("AFTERDARK_RENDER_SMOKE_COMPLETE"));
+    });
+    Later(60.f, []()
+    {
         if (FParse::Param(FCommandLine::Get(), TEXT("AfterdarkSmokeExit"))) FPlatformMisc::RequestExit(false);
     });
 #endif

@@ -257,7 +257,7 @@ bool AADAtmosphere::BuildRain()
     for (int32 I = 0; I < RainCount; ++I)
     {
         RainPositions[I] = FVector(RainRandom.FRandRange(-RainRadiusCm,RainRadiusCm), RainRandom.FRandRange(-RainRadiusCm,RainRadiusCm), RainRandom.FRandRange(0,RainHeightCm));
-        RainTransforms[I] = FTransform(FRotator(12,0,0), RainPositions[I], FVector(.007f,.007f,.5f));
+        RainTransforms[I] = FTransform(FRotator(0,0,0), RainPositions[I], FVector(.005f,.005f,.16f));
     }
     Rain->AddInstances(RainTransforms, false);
     return true;
@@ -393,6 +393,11 @@ void AADAtmosphere::UpdateRain(float ElapsedSeconds)
         bRainActiveLogged = true;
     }
     const FVector Center = Car->GetActorLocation();
+    const FVector VehicleVelocity = Car->GetVelocity().GetClampedToMaxSize(12000.f);
+    const FVector WorldFallVelocity(95.f,30.f,-RainSpeedCmPerSecond);
+    const FVector ScreenFallVelocity = (WorldFallVelocity - VehicleVelocity).GetSafeNormal(FVector(0.f,0.f,-1.f));
+    const float VehicleSpeedFactor = FMath::Clamp(VehicleVelocity.Size2D()/9000.f,0.f,1.f);
+    const FRotator StreakRotation = FRotationMatrix::MakeFromZ(ScreenFallVelocity).Rotator();
     const FVector Min = Center - FVector(RainRadiusCm,RainRadiusCm,100.f);
     const float Diameter = RainRadiusCm*2.f;
     for (int32 I = 0; I < RainCount; ++I)
@@ -407,8 +412,9 @@ void AADAtmosphere::UpdateRain(float ElapsedSeconds)
         const FVector VehicleLocal = Car->GetActorTransform().InverseTransformPosition(Position);
         const bool bInsideCar = FMath::Abs(VehicleLocal.X) < 270. && FMath::Abs(VehicleLocal.Y) < 125.
             && VehicleLocal.Z > -50. && VehicleLocal.Z < 170.;
-        const float Width = bInsideCar ? 0.f : .012f * FMath::Sqrt(RainAmount);
-        RainTransforms[I] = FTransform(FRotator(12,0,0),Position,FVector(Width,Width,.65f*RainAmount));
+        const float Width = bInsideCar ? 0.f : .0045f * FMath::Sqrt(RainAmount);
+        const float Length = (.14f + .18f*VehicleSpeedFactor) * RainAmount;
+        RainTransforms[I] = FTransform(StreakRotation,Position,FVector(Width,Width,Length));
     }
     bRainPositioned = true;
     Rain->BatchUpdateInstancesTransforms(0,RainTransforms,true,true,true);

@@ -5,11 +5,9 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "Engine/StaticMesh.h"
-#include "EngineUtils.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Player/ADVehiclePawn.h"
 #include "Vehicle/ADVehiclePhysicsComponent.h"
-#include "World/ADAtmosphere.h"
 
 AADGarage::AADGarage()
 {
@@ -38,7 +36,6 @@ AADGarage::AADGarage()
 void AADGarage::BeginPlay()
 {
     Super::BeginPlay();
-    for (TActorIterator<AADAtmosphere> It(GetWorld()); It; ++It) { Atmosphere = *It; break; }
     bReady = BuildStage();
     UpdateLightingExposure();
     UpdateCamera(0.f);
@@ -105,12 +102,12 @@ bool AADGarage::BuildStage()
     Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
     Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
     if (!Cube || !Cylinder) return false;
-    auto* Floor = CreateSurface(TEXT("StudioFloor"), TEXT("M_Concrete"), FLinearColor(.105f,.12f,.13f), .36f, .12f);
-    auto* Wall = CreateSurface(TEXT("StudioWall"), TEXT("M_Concrete"), FLinearColor(.13f,.145f,.155f), .8f, 0.f);
-    auto* Dark = CreateSurface(TEXT("StudioDark"), TEXT("M_Metal"), FLinearColor(.022f,.031f,.04f), .47f, .55f);
-    auto* Metal = CreateSurface(TEXT("StudioMetal"), TEXT("M_Metal"), FLinearColor(.21f,.235f,.26f), .3f, .8f);
+    auto* Floor = CreateSurface(TEXT("StudioFloor"), TEXT("M_Concrete_PBR"), FLinearColor(.105f,.12f,.13f), .36f, .12f);
+    auto* Wall = CreateSurface(TEXT("StudioWall"), TEXT("M_Concrete_PBR"), FLinearColor(.13f,.145f,.155f), .8f, 0.f);
+    auto* Dark = CreateSurface(TEXT("StudioDark"), TEXT("M_IndustrialMetal_PBR"), FLinearColor(.022f,.031f,.04f), .47f, .55f);
+    auto* Metal = CreateSurface(TEXT("StudioMetal"), TEXT("M_IndustrialMetal_PBR"), FLinearColor(.21f,.235f,.26f), .3f, .8f);
     auto* Cabinet = CreateSurface(TEXT("StudioCabinet"), TEXT("M_Paint"), FLinearColor(.027f,.12f,.14f), .32f, .45f);
-    auto* Rubber = CreateSurface(TEXT("StudioRubber"), TEXT("M_Rubber"), FLinearColor(.018f,.02f,.025f), .87f, 0.f);
+    auto* Rubber = CreateSurface(TEXT("StudioRubber"), TEXT("M_Rubber_PBR"), FLinearColor(.018f,.02f,.025f), .87f, 0.f);
     auto* Marking = CreateSurface(TEXT("StudioMarking"), TEXT("M_RoadMarking"), FLinearColor(.58f,.62f,.60f), .64f, 0.f);
     auto* White = CreateSurface(TEXT("StudioLight"), TEXT("M_EmissiveWhite"), FLinearColor(.77f,.88f,1.f), .25f, 0.f, 3.f);
     auto* Amber = CreateSurface(TEXT("StudioAmber"), TEXT("M_EmissiveWhite"), FLinearColor(1.f,.49f,.16f), .25f, 0.f, 2.f);
@@ -179,10 +176,10 @@ bool AADGarage::BuildStage()
     AddPiece(TEXT("Dark"), Dark, FVector(760,990,63), FVector(178,6,92));
 
     // One shadowed key plus inexpensive fills remains usable on the SM5 path.
-    AddStudioLight(TEXT("KeyLight"), FVector(420,370,600), FVector(0,0,95), FLinearColor(.83f,.9f,1.f), 90000.f, true);
-    AddStudioLight(TEXT("FillLight"), FVector(380,-500,470), FVector(0,0,95), FLinearColor(.58f,.78f,1.f), 58000.f, false);
-    AddStudioLight(TEXT("RimLight"), FVector(-570,120,530), FVector(0,0,100), FLinearColor(1.f,.66f,.39f), 88000.f, false);
-    AddStudioLight(TEXT("WorkshopLight"), FVector(-620,-800,540), FVector(-650,-1070,140), FLinearColor(.84f,.91f,1.f), 27000.f, false);
+    AddStudioLight(TEXT("KeyLight"), FVector(420,370,600), FVector(0,0,95), FLinearColor(.83f,.9f,1.f), 22000.f, true);
+    AddStudioLight(TEXT("FillLight"), FVector(380,-500,470), FVector(0,0,95), FLinearColor(.58f,.78f,1.f), 11000.f, false);
+    AddStudioLight(TEXT("RimLight"), FVector(-570,120,530), FVector(0,0,100), FLinearColor(1.f,.66f,.39f), 19000.f, false);
+    AddStudioLight(TEXT("WorkshopLight"), FVector(-620,-800,540), FVector(-650,-1070,140), FLinearColor(.84f,.91f,1.f), 6500.f, false);
     return true;
 }
 
@@ -296,22 +293,18 @@ void AADGarage::UpdateCamera(float DeltaSeconds)
 
 void AADGarage::UpdateLightingExposure()
 {
-    const float Bias = Atmosphere.IsValid() ? FMath::Clamp(Atmosphere->GetExposureBias(),-16.f,16.f) : 0.f;
-    if (FMath::IsNearlyEqual(Bias,AppliedExposureBias,.001f)) return;
-    AppliedExposureBias = Bias;
-    Camera->PostProcessSettings.AutoExposureBias = Bias;
-    // The shared skylight receives world exposure; local studio lights compensate
-    // by the inverse factor so their illumination stays stable through the day.
-    const float Multiplier = FMath::Pow(2.f,-Bias);
+    // The garage is a controlled studio. Do not inherit the world EV and then
+    // counter it with 2^-EV lamp scaling: the city uses a -10 EV daylight bias,
+    // which previously drove these local lights above 1,000x their authored power.
+    Camera->PostProcessSettings.AutoExposureBias = 0.f;
     for (const FStudioLight& Light : StudioLights)
-        if (Light.Component.IsValid()) Light.Component->SetIntensity(Light.BaseLumens*Multiplier);
+        if (Light.Component.IsValid()) Light.Component->SetIntensity(Light.BaseLumens);
 }
 
 void AADGarage::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     if (!IsOccupied()) { Exit(); return; }
-    UpdateLightingExposure();
     UpdateCamera(DeltaSeconds);
     // Keep the tires on the pad when a tuning preset changes unloaded ride height.
     AADVehiclePawn* Car = Occupant.Get();

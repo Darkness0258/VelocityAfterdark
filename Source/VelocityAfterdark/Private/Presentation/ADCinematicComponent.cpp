@@ -99,7 +99,11 @@ bool UADCinematicComponent::Enter(EADCinematicMode Desired)
     if (!Chassis.IsValid() || Car->GetActorTransform().ContainsNaN())
     { Message=TEXT("The vehicle cannot be inspected right now."); Playback.Reset(); return false; }
     bWasPaused=PC->IsPaused();
-    if (!bWasPaused && !PC->SetPause(true)) { Message=TEXT("The world could not be paused."); return false; }
+    // Photo/replay are inspection tools and freeze the simulation. Story scenes
+    // are real-time camera sequences: traffic, weather and city lights must keep
+    // moving behind the shots while the player's car is held safely in place.
+    if (!bWasPaused && Desired!=EADCinematicMode::Story && !PC->SetPause(true))
+    { Message=TEXT("The world could not be paused."); return false; }
     Vehicle=Car;
     ReturnPose=Car->GetActorTransform();
     ReturnVelocity=Chassis->GetPhysicsLinearVelocity();
@@ -107,11 +111,11 @@ bool UADCinematicComponent::Enter(EADCinematicMode Desired)
     bWasDriving=Car->IsDrivingEnabled(); bWasSimulating=Chassis->IsSimulatingPhysics();
     bWasPhysicsTicking=Car->GetPhysics()->IsComponentTickEnabled();
     Car->SetDrivingEnabled(false);
-    if (Desired==EADCinematicMode::Replay)
+    if (Desired==EADCinematicMode::Replay || Desired==EADCinematicMode::Story)
     {
         Chassis->SetSimulatePhysics(false);
         Car->GetPhysics()->SetComponentTickEnabled(false);
-        Car->SetGarageMode(true);
+        if (Desired==EADCinematicMode::Replay) Car->SetGarageMode(true);
     }
     Camera=GetWorld()->SpawnActor<ACameraActor>(PC->PlayerCameraManager->GetCameraLocation(),PC->PlayerCameraManager->GetCameraRotation());
     if (!Camera)
@@ -149,6 +153,9 @@ bool UADCinematicComponent::Enter(EADCinematicMode Desired)
 
 double UADCinematicComponent::GetReplayDuration() const
 { return Playback.Num()>1 ? Playback.Last().Seconds-Playback[0].Seconds : 0.; }
+
+FTransform UADCinematicComponent::GetCinematicCameraTransform() const
+{ return Camera ? Camera->GetActorTransform() : FTransform::Identity; }
 
 void UADCinematicComponent::NotifyRecordingDiscontinuity()
 {
@@ -325,21 +332,53 @@ void UADCinematicComponent::UpdateStory(float Step)
     if (!Vehicle.IsValid() || !Camera) { Leave(); return; }
     StorySeconds=FMath::Min(StoryDurationSeconds,StorySeconds+FMath::Max(0.f,Step));
     const float Progress=FMath::Clamp(StorySeconds/StoryDurationSeconds,0.f,1.f);
-    const float Track=Progress*3.f;
-    const int32 Segment=FMath::Min(2,FMath::FloorToInt(Track));
+    constexpr int32 ShotCount=4;
+    const float Track=Progress*ShotCount;
+    const int32 Segment=FMath::Min(ShotCount-1,FMath::FloorToInt(Track));
     const float RawAlpha=FMath::Clamp(Track-Segment,0.f,1.f);
-    const float Alpha=RawAlpha*RawAlpha*(3.f-2.f*RawAlpha);
+    const float Alpha=RawAlpha;
     const FVector CameraOffsets[] = {
-        FVector(-980.f,-780.f,470.f), FVector(-650.f,870.f,300.f),
-        FVector(250.f,920.f,245.f), FVector(720.f,-260.f,150.f)
+        FVector(-1080.f,-470.f,660.f), FVector(-760.f,-780.f,270.f),
+        FVector(-310.f,940.f,175.f), FVector(520.f,760.f,190.f),
+        FVector(1040.f,-220.f,260.f)
     };
-    const FVector A=ReturnPose.TransformPosition(CameraOffsets[Segment]);
-    const FVector B=ReturnPose.TransformPosition(CameraOffsets[Segment+1]);
-    const FVector Position=FMath::Lerp(A,B,Alpha);
-    const FVector Focus=Vehicle->GetActorLocation()+FVector(0.f,0.f,58.f);
+    const FVector FocusOffsets[] = {
+        FVector(0.f,0.f,48.f), FVector(30.f,0.f,46.f), FVector(72.f,0.f,54.f),
+        FVector(135.f,0.f,63.f), FVector(290.f,0.f,115.f)
+    };
+    const int32 Previous=FMath::Max(0,Segment-1);
+    const int32 Next=Segment+1;
+    const int32 Following=FMath::Min(ShotCount,Segment+2);
+    const FVector P0=CameraOffsets[Previous];
+    const FVector P1=CameraOffsets[Segment];
+    const FVector P2=CameraOffsets[Next];
+    const FVector P3=CameraOffsets[Following];
+    const FVector LocalPosition=FMath::CubicInterp(P1,(P2-P0)*.42f,P2,(P3-P1)*.42f,Alpha);
+    const FVector FocusLocal=FMath::Lerp(FocusOffsets[Segment],FocusOffsets[Next],Alpha);
+    const FVector Position=ReturnPose.TransformPosition(LocalPosition);
+    const FVector Focus=ReturnPose.TransformPosition(FocusLocal);
     Camera->SetActorLocationAndRotation(Position,(Focus-Position).Rotation());
-    Camera->GetCameraComponent()->SetFieldOfView(42.f+FMath::Sin(Progress*PI)*3.f);
+    auto* Lens=Camera->GetCameraComponent();
+    const float FovKeys[]={50.f,38.f,43.f,48.f,56.f};
+    const float Fov=FMath::Lerp(FovKeys[Segment],FovKeys[Next],Alpha);
+    Lens->SetFieldOfView(Fov);
+    auto& Grade=Lens->PostProcessSettings;
+    Grade.bOverride_DepthOfFieldFocalDistance=true;
+    Grade.bOverride_DepthOfFieldFstop=true;
+    Grade.DepthOfFieldFocalDistance=FVector::Distance(Position,Focus);
+    Grade.DepthOfFieldFstop=FMath::Lerp(3.8f,5.6f,Progress);
     if (StorySeconds>=StoryDurationSeconds) Leave();
+}
+
+int32 UADCinematicComponent::GetStoryShotIndex() const
+{
+    constexpr int32 ShotCount=4;
+    return FMath::Clamp(FMath::FloorToInt((StorySeconds/StoryDurationSeconds)*ShotCount)+1,1,ShotCount);
+}
+
+float UADCinematicComponent::GetStoryProgress() const
+{
+    return FMath::Clamp(StorySeconds/StoryDurationSeconds,0.f,1.f);
 }
 
 void UADCinematicComponent::Capture()
@@ -360,10 +399,10 @@ void UADCinematicComponent::Leave()
     const bool bStartCareerRace=Mode==EADCinematicMode::Story && bContinueToCareerRace;
     if (Vehicle.IsValid() && !Vehicle->IsActorBeingDestroyed())
     {
-        if (Mode==EADCinematicMode::Replay)
+        if (Mode==EADCinematicMode::Replay || Mode==EADCinematicMode::Story)
         {
             Vehicle->SetActorTransform(ReturnPose,false,nullptr,ETeleportType::TeleportPhysics);
-            Vehicle->SetGarageMode(false);
+            if (Mode==EADCinematicMode::Replay) Vehicle->SetGarageMode(false);
             if (Chassis.IsValid())
             {
                 Chassis->SetSimulatePhysics(bWasSimulating);
