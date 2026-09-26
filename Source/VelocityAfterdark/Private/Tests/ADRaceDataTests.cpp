@@ -72,21 +72,23 @@ bool FADRaceDataTest::RunTest(const FString& Parameters)
     FADRaceDefinition Sprint;
     if (!TestTrue(TEXT("Open-road sprint loads"),Sprint.LoadFromJson(SprintPath,Error))) { AddError(Error); return false; }
     TestEqual(TEXT("Sprint uses zero laps"),Sprint.Laps,0);
-    TestTrue(TEXT("Sprint retains its route endpoint"),Sprint.PointAtDistance(6000.).Equals(FVector2D(82000.,-24000.),.001));
-    TestTrue(TEXT("Sprint does not wrap behind its start"),Sprint.PointAtDistance(-100.).Equals(FVector2D(-40000.,0.),.001));
+    const FVector2D SprintStart(-70950.,-25000.);
+    const FVector2D SprintFinish(-40000.,-56546.0377860675);
+    TestTrue(TEXT("Sprint retains its Sable road endpoint"),Sprint.PointAtDistance(6000.).Equals(SprintFinish,.001));
+    TestTrue(TEXT("Sprint does not wrap behind its start"),Sprint.PointAtDistance(-100.).Equals(SprintStart,.001));
     double SprintStartError=0.;
     TestTrue(TEXT("Sprint start gate projects to route distance zero"),FMath::IsNearlyZero(
-        Sprint.ClosestDistanceM(FVector(-40000.,0.,80.),SprintStartError),.001) && SprintStartError<.001);
+        Sprint.ClosestDistanceM(FVector(SprintStart.X,SprintStart.Y,80.),SprintStartError),.001) && SprintStartError<.001);
     double SprintError=0.;
     TestTrue(TEXT("Sprint projection retains the finish distance"),FMath::IsNearlyEqual(
-        Sprint.ClosestDistanceM(FVector(82000.,-24000.,80.),SprintError),4800.,.001) && SprintError<.001);
+        Sprint.ClosestDistanceM(FVector(SprintFinish.X,SprintFinish.Y,80.),SprintError),4800.,.001) && SprintError<.001);
     TArray<ADRaceRules::Gate> SprintGates;
     for (const auto& Gate : Sprint.Checkpoints)
         SprintGates.Add({{Gate.Location.X,Gate.Location.Y,Gate.Location.Z},
             {Gate.Forward.X,Gate.Forward.Y,Gate.Forward.Z},Gate.HalfWidthCm,Gate.HalfHeightCm});
     ADRaceRules::Progress Progress;
     TestTrue(TEXT("Point-to-point progress initializes without laps"),Progress.Reset(SprintGates.Num(),Sprint.Laps));
-    TestTrue(TEXT("Grid sample is valid"),Progress.ResetSample({-40000.,600.,80.},0.));
+    TestTrue(TEXT("Grid sample is valid"),Progress.ResetSample({-71550.,-25000.,80.},0.));
     ADRaceRules::Event StartEvent=ADRaceRules::Event::None;
     ADRaceRules::Event MiddleEvent=ADRaceRules::Event::None;
     ADRaceRules::Event FinishEvent=ADRaceRules::Event::None;

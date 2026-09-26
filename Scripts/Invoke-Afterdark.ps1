@@ -214,7 +214,13 @@ switch ($Action) {
             'VelocityAfterdark/Content/Velocity/Materials/Generated/T_Facade_Normal_V2.ubulk',
             'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Diffuse_2K.ubulk',
             'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_NormalDX_2K.ubulk',
-            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Roughness_2K.ubulk'
+            'VelocityAfterdark/Content/Velocity/External/AsphaltTrack/T_AsphaltTrack_Roughness_2K.ubulk',
+            'VelocityAfterdark/Content/Velocity/External/KenneyCityKitCommercial/SM_Kenney_Commercial_SkyscraperA.uasset',
+            'VelocityAfterdark/Content/Velocity/External/KenneyCityKitCommercial/SM_Kenney_Commercial_BuildingA.uasset',
+            'VelocityAfterdark/Content/Velocity/External/KenneyCityKitIndustrial/SM_Kenney_Industrial_BuildingA.uasset',
+            'VelocityAfterdark/Content/Velocity/External/KenneyCityKitIndustrial/SM_Kenney_Industrial_ContainerA.uasset',
+            'VelocityAfterdark/Content/Velocity/External/KenneyCityKitRoads/SM_Kenney_Roads_LampCurved.uasset',
+            'VelocityAfterdark/Content/Velocity/External/KenneyCityKitRoads/SM_Kenney_Roads_TrafficLight.uasset'
         )
         foreach ($visualAsset in $requiredVisualAssets) {
             if (-not (Select-String -LiteralPath $manifest -SimpleMatch $visualAsset -Quiet)) {
@@ -222,6 +228,6 @@ switch ($Action) {
             }
         }
         & (Join-Path $PSScriptRoot 'Record-BuildProof.ps1')
-        Write-Host 'AFTERDARK_PACKAGE_OK: Windows archive, runtime JSON, Poly Haven road PBR, district materials and CC0 city car staged. Runtime acceptance is separate from packaging.'
+        Write-Host 'AFTERDARK_PACKAGE_OK: Windows archive, runtime JSON, road PBR, district materials, CC0 city car and Kenney district meshes staged. Runtime acceptance is separate from packaging.'
     }
 }

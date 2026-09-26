@@ -35,6 +35,7 @@ public:
     FString GetCurrentDistrictId() const { return CurrentDistrictId; }
     int32 GetLoadedCellCount() const { return LoadedCellCount; }
     int32 GetTotalCellCount() const { return Cells.Num(); }
+    int32 GetLoadedKenneyInstanceCount() const;
     float GetRoadLengthMeters() const { return RoadLengthMeters; }
     FVector2D GetGroundHalfExtent() const { return GroundHalfExtent; }
     const TArray<FADRegionalRoad>& GetRoadSegments() const { return Roads; }
@@ -70,10 +71,20 @@ private:
     UMaterialInstanceDynamic* MakeMaterial(const TCHAR* Name, const TCHAR* Asset,
         FLinearColor Color, float Roughness, float Metallic);
     void AddResident(FName Material, FVector Position, FVector Size, FRotator Rotation = FRotator::ZeroRotator);
+    void AddResidentMesh(FName BatchKey, UStaticMesh* Mesh, FVector Position, FVector Size,
+        FRotator Rotation = FRotator::ZeroRotator);
 
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> Cube;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> Cylinder;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> Sphere;
+    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> CommercialSkyscrapers;
+    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> CommercialMidRises;
+    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> IndustrialWarehouses;
+    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> IndustrialContainers;
+    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> IndustrialDetails;
+    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> RoadLamps;
+    UPROPERTY(Transient) TObjectPtr<UStaticMesh> TrafficSignal;
+    UPROPERTY(Transient) TObjectPtr<UStaticMesh> ConstructionBarrier;
     UPROPERTY(Transient) TMap<FName,TObjectPtr<UMaterialInterface>> Materials;
     UPROPERTY(Transient) TMap<FName,TObjectPtr<UInstancedStaticMeshComponent>> ResidentBatches;
     UPROPERTY(Transient) TArray<TObjectPtr<UInstancedStaticMeshComponent>> ActiveComponents;

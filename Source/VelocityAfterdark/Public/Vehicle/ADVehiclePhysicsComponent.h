@@ -20,6 +20,7 @@ struct VELOCITYAFTERDARK_API FADVehicleTelemetry
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float Brake = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float Steering = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float Slip = 0.f;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float StabilityIntervention = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) int32 GroundedWheels = 0;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) bool bAutomaticTransmission = true;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) bool bReady = false;
@@ -63,9 +64,10 @@ public:
     float GetSteeringDegrees() const { return SteeringDegrees; }
 
     UPROPERTY(EditDefaultsOnly, Category="Vehicle") FString VehicleDefinitionFile = TEXT("Data/Vehicles/aster_s6.json");
-    // Phase 1 demand-limiting assists, not a full wheel-angular-dynamics ABS/TCS.
+    // Demand-limited ABS/TCS and yaw-rate ESC; wheel angular inertia is not modeled.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Assists") bool bTractionControl = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Assists") bool bAntiLockBrakes = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Assists") bool bStabilityControl = true;
 
 private:
     struct FWheelState

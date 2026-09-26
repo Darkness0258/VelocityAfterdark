@@ -21,6 +21,7 @@
 #include "World/ADAtmosphere.h"
 #include "World/ADExplorationDirector.h"
 #include "World/ADPoliceDirector.h"
+#include "World/ADDistrict.h"
 #include "World/ADRegionalWorld.h"
 #include "World/ADTrafficManager.h"
 
@@ -83,6 +84,20 @@ private:
                 && Weather->GetRainIntensity()>=.8f && Weather->GetWetness()>=.45f);
             Test->TestTrue(TEXT("Physical traffic population is bounded"),Traffic->GetTrafficCount()>0 && Traffic->GetTrafficCount()<=4);
             Test->TestTrue(TEXT("Road graph and discovery system load"),Mode->GetExploration()->IsReady());
+            AADDistrict* Dockside=nullptr;
+            for (TActorIterator<AADDistrict> It(World);It;++It) { Dockside=*It; break; }
+            Test->TestTrue(TEXT("Starter skyline uses instanced imported city-kit buildings and props"),
+                Dockside && Dockside->GetImportedDistrictMeshInstanceCount()>0);
+            if (Dockside)
+            {
+                FCollisionQueryParams BuildingQuery(SCENE_QUERY_STAT(ADBuildingProxyAcceptance),false,Car);
+                FHitResult BuildingHit;
+                const FVector BuildingProbe(-33750.f,6500.f,30000.f);
+                const bool bBuildingBlocks=World->LineTraceSingleByChannel(BuildingHit,BuildingProbe,
+                    FVector(BuildingProbe.X,BuildingProbe.Y,-200.f),ECC_Visibility,BuildingQuery);
+                Test->TestTrue(TEXT("Hidden visual proxy keeps imported Dockside buildings physically solid"),
+                    bBuildingBlocks && BuildingHit.GetActor()==Dockside);
+            }
             Test->TestTrue(TEXT("Regional road length extends the original district"),Regions->GetRoadLengthMeters()>6000.f);
             Test->TestTrue(TEXT("Recovery bounds include the regional road world"),Mode->GetDriveBounds().X>=Regions->GetGroundHalfExtent().X
                 && Mode->GetDriveBounds().Y>=Regions->GetGroundHalfExtent().Y);
@@ -142,6 +157,8 @@ private:
             Test->TestEqual(TEXT("Lost contact enters timed search"),Police->GetState(),EADPoliceState::Search);
             Test->TestTrue(TEXT("Search remains active instead of immediate escape"),Police->GetSearchRemainingSeconds()>20.f);
             Test->TestTrue(TEXT("Scenery streams within the cell budget"),Regions->GetLoadedCellCount()>0 && Regions->GetLoadedCellCount()<=24);
+            Test->TestTrue(TEXT("District cells instantiate imported Kenney building meshes"),
+                Regions->GetLoadedKenneyInstanceCount()>0);
             Stage=4; StageTime=World->GetTimeSeconds(); return false;
         }
         if (Stage==4 && Elapsed>=31.)

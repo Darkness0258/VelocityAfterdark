@@ -8,7 +8,7 @@
 
 namespace
 {
-bool Number(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, double& Out,
+bool RaceJsonNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, double& Out,
     double Minimum, double Maximum, FString& Error)
 {
     const TSharedPtr<FJsonValue> Value = Object.IsValid() ? Object->TryGetField(Key) : nullptr;
@@ -21,7 +21,7 @@ bool Number(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, double& Out
     return true;
 }
 
-bool String(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString& Out, FString& Error)
+bool RaceJsonString(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString& Out, FString& Error)
 {
     const TSharedPtr<FJsonValue> Value = Object.IsValid() ? Object->TryGetField(Key) : nullptr;
     if (!Value.IsValid() || Value->Type != EJson::String || !Value->TryGetString(Out)
@@ -33,9 +33,9 @@ bool String(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString& Ou
     return true;
 }
 
-bool Identifier(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString& Out, FString& Error)
+bool RaceJsonIdentifier(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString& Out, FString& Error)
 {
-    if (!String(Object, Key, Out, Error) || Out != Out.ToLower() || Out.Len() > 48) return false;
+    if (!RaceJsonString(Object, Key, Out, Error) || Out != Out.ToLower() || Out.Len() > 48) return false;
     for (const TCHAR Character : Out)
         if ((Character < TEXT('a') || Character > TEXT('z'))
             && (Character < TEXT('0') || Character > TEXT('9')) && Character != TEXT('_'))
@@ -46,7 +46,7 @@ bool Identifier(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FString
     return true;
 }
 
-bool Array(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key,
+bool RaceJsonArray(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key,
     const TArray<TSharedPtr<FJsonValue>>*& Out, int32 Minimum, int32 Maximum, FString& Error)
 {
     if (!Object.IsValid() || !Object->TryGetArrayField(Key, Out) || !Out || Out->Num() < Minimum || Out->Num() > Maximum)
@@ -57,7 +57,7 @@ bool Array(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key,
     return true;
 }
 
-bool Tuple(const TSharedPtr<FJsonValue>& Value, double* Out, int32 Count, const TCHAR* Label, FString& Error)
+bool RaceJsonTuple(const TSharedPtr<FJsonValue>& Value, double* Out, int32 Count, const TCHAR* Label, FString& Error)
 {
     const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
     if (!Value.IsValid() || !Value->TryGetArray(Values) || !Values || Values->Num() != Count)
@@ -77,10 +77,10 @@ bool Tuple(const TSharedPtr<FJsonValue>& Value, double* Out, int32 Count, const 
     return true;
 }
 
-bool Vector(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FVector& Out, FString& Error)
+bool RaceJsonVector(const TSharedPtr<FJsonObject>& Object, const TCHAR* Key, FVector& Out, FString& Error)
 {
     double Values[3] = {};
-    if (!Object.IsValid() || !Tuple(Object->TryGetField(Key), Values, 3, Key, Error)) return false;
+    if (!Object.IsValid() || !RaceJsonTuple(Object->TryGetField(Key), Values, 3, Key, Error)) return false;
     Out = FVector(Values[0], Values[1], Values[2]);
     return true;
 }
@@ -173,21 +173,21 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
     }
     FADRaceDefinition Candidate;
     double Schema = 0.0, LapsValue = 0.0;
-    if (!Number(Root, TEXT("schemaVersion"), Schema, 1, 1, Error)
-        || !String(Root, TEXT("id"), Candidate.Id, Error) || !String(Root, TEXT("name"), Candidate.Name, Error)
-        || !Number(Root, TEXT("laps"), LapsValue, 0, 99, Error)
-        || !Number(Root, TEXT("countdownSeconds"), Candidate.CountdownSeconds, 1, 10, Error)
-        || !Number(Root, TEXT("timeoutSeconds"), Candidate.TimeoutSeconds, 60, 7200, Error)
-        || !Number(Root, TEXT("recoveryPenaltySeconds"), Candidate.RecoveryPenaltySeconds, 1, 60, Error)) return false;
+    if (!RaceJsonNumber(Root, TEXT("schemaVersion"), Schema, 1, 1, Error)
+        || !RaceJsonString(Root, TEXT("id"), Candidate.Id, Error) || !RaceJsonString(Root, TEXT("name"), Candidate.Name, Error)
+        || !RaceJsonNumber(Root, TEXT("laps"), LapsValue, 0, 99, Error)
+        || !RaceJsonNumber(Root, TEXT("countdownSeconds"), Candidate.CountdownSeconds, 1, 10, Error)
+        || !RaceJsonNumber(Root, TEXT("timeoutSeconds"), Candidate.TimeoutSeconds, 60, 7200, Error)
+        || !RaceJsonNumber(Root, TEXT("recoveryPenaltySeconds"), Candidate.RecoveryPenaltySeconds, 1, 60, Error)) return false;
     if (LapsValue != FMath::FloorToDouble(LapsValue)) { Error = TEXT("laps must be an integer."); return false; }
     Candidate.Laps = static_cast<int32>(LapsValue);
 
     const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
-    if (!Array(Root, TEXT("routePoints"), Items, 8, 256, Error)) return false;
+    if (!RaceJsonArray(Root, TEXT("routePoints"), Items, 8, 256, Error)) return false;
     for (const TSharedPtr<FJsonValue>& Item : *Items)
     {
         double Values[3] = {};
-        if (!Tuple(Item, Values, 3, TEXT("routePoints"), Error)) return false;
+        if (!RaceJsonTuple(Item, Values, 3, TEXT("routePoints"), Error)) return false;
         if (FMath::Abs(Values[0]) > 250000 || FMath::Abs(Values[1]) > 250000 || Values[2] < 20 || Values[2] > 140)
         { Error = TEXT("routePoints must remain within 2.5 km of the origin and use speed limits of 20-140 km/h."); return false; }
         Candidate.RoutePoints.Add({FVector2D(Values[0], Values[1]), Values[2]});
@@ -208,7 +208,7 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
     if (Candidate.TimeoutSeconds < Candidate.RouteLengthM * FMath::Max(Candidate.Laps, 1) / (140.0 / 3.6))
     { Error = TEXT("Race timeout is shorter than the theoretical minimum completion time."); return false; }
 
-    if (!Array(Root, TEXT("checkpoints"), Items, Candidate.Laps == 0 ? 2 : 4, 256, Error)) return false;
+    if (!RaceJsonArray(Root, TEXT("checkpoints"), Items, Candidate.Laps == 0 ? 2 : 4, 256, Error)) return false;
     double PreviousDistanceM = -1.0;
     for (int32 I = 0; I < Items->Num(); ++I)
     {
@@ -217,11 +217,11 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         if (!Item.IsValid() || !Item->TryGetObject(Object) || !Object || !Object->IsValid())
         { Error = FString::Printf(TEXT("Checkpoint %d must be an object."), I); return false; }
         FADCheckpoint Gate;
-        if (!Vector(*Object, TEXT("location"), Gate.Location, Error)
-            || !Vector(*Object, TEXT("forward"), Gate.Forward, Error)
-            || !Number(*Object, TEXT("halfWidthCm"), Gate.HalfWidthCm, 300, 1100, Error)
-            || !Number(*Object, TEXT("halfHeightCm"), Gate.HalfHeightCm, 100, 400, Error)
-            || !Number(*Object, TEXT("distanceM"), Gate.DistanceM, 0, Candidate.RouteLengthM, Error)) return false;
+        if (!RaceJsonVector(*Object, TEXT("location"), Gate.Location, Error)
+            || !RaceJsonVector(*Object, TEXT("forward"), Gate.Forward, Error)
+            || !RaceJsonNumber(*Object, TEXT("halfWidthCm"), Gate.HalfWidthCm, 300, 1100, Error)
+            || !RaceJsonNumber(*Object, TEXT("halfHeightCm"), Gate.HalfHeightCm, 100, 400, Error)
+            || !RaceJsonNumber(*Object, TEXT("distanceM"), Gate.DistanceM, 0, Candidate.RouteLengthM, Error)) return false;
         if (Gate.Location.Z < 30 || Gate.Location.Z > 200 || FMath::Abs(Gate.Forward.Z) > 0.001
             || FMath::Abs(Gate.Forward.SizeSquared() - 1.0) > 0.001)
         { Error = FString::Printf(TEXT("Checkpoint %d requires a 30-200 cm height and a unit horizontal forward vector."), I); return false; }
@@ -251,7 +251,7 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
     { Error = Candidate.Laps == 0 ? TEXT("Point-to-point finish gate must mark the route endpoint.")
         : TEXT("Last circuit checkpoint must be at least 20 metres before the start/finish line."); return false; }
 
-    if (!Array(Root, TEXT("opponents"), Items, 1, 15, Error)) return false;
+    if (!RaceJsonArray(Root, TEXT("opponents"), Items, 1, 15, Error)) return false;
     TSet<FString> Names, OpponentIds;
     for (const TSharedPtr<FJsonValue>& Item : *Items)
     {
@@ -260,11 +260,11 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         { Error = TEXT("Each opponent must be an object."); return false; }
         FADRaceOpponent Opponent;
         double Color[3] = {}, Speed = 0.0, Lane = 0.0;
-        if (!Identifier(*Object, TEXT("id"), Opponent.Id, Error)
-            || !String(*Object, TEXT("name"), Opponent.Name, Error)
-            || !Tuple((*Object)->TryGetField(TEXT("color")), Color, 3, TEXT("color"), Error)
-            || !Number(*Object, TEXT("speedScale"), Speed, 0.6, 1.2, Error)
-            || !Number(*Object, TEXT("laneOffsetCm"), Lane, -300, 300, Error)) return false;
+        if (!RaceJsonIdentifier(*Object, TEXT("id"), Opponent.Id, Error)
+            || !RaceJsonString(*Object, TEXT("name"), Opponent.Name, Error)
+            || !RaceJsonTuple((*Object)->TryGetField(TEXT("color")), Color, 3, TEXT("color"), Error)
+            || !RaceJsonNumber(*Object, TEXT("speedScale"), Speed, 0.6, 1.2, Error)
+            || !RaceJsonNumber(*Object, TEXT("laneOffsetCm"), Lane, -300, 300, Error)) return false;
         if (Names.Contains(Opponent.Name.ToLower()) || OpponentIds.Contains(Opponent.Id))
         { Error = TEXT("Opponent names and stable IDs must be unique."); return false; }
         Names.Add(Opponent.Name.ToLower());
@@ -278,20 +278,20 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         double Aggression = 0., Conservatism = 0., Mistakes = 0.;
         if (!(*Object)->TryGetObjectField(TEXT("personality"), PersonalityObject) || !PersonalityObject
             || !PersonalityObject->IsValid()
-            || !Number(*PersonalityObject, TEXT("overtakeAggression"), Aggression, 0., 1., Error)
-            || !Number(*PersonalityObject, TEXT("brakingConservatism"), Conservatism, 0., 1., Error)
-            || !Number(*PersonalityObject, TEXT("pressureMistakeFrequency"), Mistakes, 0., 1., Error)) return false;
+            || !RaceJsonNumber(*PersonalityObject, TEXT("overtakeAggression"), Aggression, 0., 1., Error)
+            || !RaceJsonNumber(*PersonalityObject, TEXT("brakingConservatism"), Conservatism, 0., 1., Error)
+            || !RaceJsonNumber(*PersonalityObject, TEXT("pressureMistakeFrequency"), Mistakes, 0., 1., Error)) return false;
         Opponent.Personality.OvertakeAggression = static_cast<float>(Aggression);
         Opponent.Personality.BrakingConservatism = static_cast<float>(Conservatism);
         Opponent.Personality.PressureMistakeFrequency = static_cast<float>(Mistakes);
         Candidate.Opponents.Add(Opponent);
     }
 
-    if (!Array(Root, TEXT("grid"), Items, Candidate.Opponents.Num() + 1, Candidate.Opponents.Num() + 1, Error)) return false;
+    if (!RaceJsonArray(Root, TEXT("grid"), Items, Candidate.Opponents.Num() + 1, Candidate.Opponents.Num() + 1, Error)) return false;
     for (const TSharedPtr<FJsonValue>& Item : *Items)
     {
         double Values[4] = {};
-        if (!Tuple(Item, Values, 4, TEXT("grid"), Error)) return false;
+        if (!RaceJsonTuple(Item, Values, 4, TEXT("grid"), Error)) return false;
         const FVector Position(Values[0], Values[1], Values[2]);
         const FVector FromStart = Position - Candidate.Checkpoints[0].Location;
         const double StartProjection = FVector::DotProduct(FromStart, Candidate.Checkpoints[0].Forward);
@@ -313,7 +313,7 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         Candidate.Grid.Add(Transform);
     }
 
-    if (!Array(Root, TEXT("difficultySpeedScales"), Items, 3, 3, Error)) return false;
+    if (!RaceJsonArray(Root, TEXT("difficultySpeedScales"), Items, 3, 3, Error)) return false;
     double PreviousScale = 0.0;
     for (const TSharedPtr<FJsonValue>& Item : *Items)
     {

@@ -18,6 +18,8 @@
 #include "Settings/ADSettingsSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Presentation/ADCinematicComponent.h"
+#include "Career/ADCareerSubsystem.h"
+#include "Ownership/ADOwnershipSubsystem.h"
 #include "Online/ADOnlineSubsystem.h"
 #include "World/ADDistrict.h"
 #include "World/ADAtmosphere.h"
@@ -384,7 +386,7 @@ void AADPlayerController::SettingsInput()
     }
 }
 void AADPlayerController::MapInput() { MapComponent->Toggle(); }
-void AADPlayerController::CameraInput() { if (bSessionPaused) { SettingsInput(); return; } if (MapComponent->IsOpen() || AreSettingsOpen()) return; if (Cinematic->IsActive()) { Cinematic->CycleCamera(); return; } if (AADVehiclePawn* Car=GetVehiclePawn(); Car && bSessionStarted && !GarageSession->IsActive()) { Car->CycleCamera(); } }
+void AADPlayerController::CameraInput() { if (bSessionPaused) { SettingsInput(); return; } if (MapComponent->IsOpen() || AreSettingsOpen()) return; if (Cinematic->IsActive()) { if (Cinematic->GetMode()!=EADCinematicMode::Story) Cinematic->CycleCamera(); return; } if (AADVehiclePawn* Car=GetVehiclePawn(); Car && bSessionStarted && !GarageSession->IsActive()) { Car->CycleCamera(); } }
 void AADPlayerController::PhotoInput() { if (MapComponent->IsOpen() || AreSettingsOpen()) return; if (Cinematic->IsActive()) Cinematic->Leave(); else Cinematic->EnterPhoto(); }
 void AADPlayerController::ReplayInput() { if (MapComponent->IsOpen() || AreSettingsOpen()) return; if (Cinematic->IsActive()) Cinematic->Leave(); else Cinematic->EnterReplay(); }
 void AADPlayerController::CaptureInput() { Cinematic->Capture(); }
@@ -446,7 +448,24 @@ void AADPlayerController::CareerInput()
     if (auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>(); Mode && Mode->GetPoliceDirector() && Mode->GetPoliceDirector()->IsActive()) return;
     if (RaceManager->GetState()!=EADRaceState::Idle && RaceManager->GetState()!=EADRaceState::Results) return;
     BeginDriving();
-    if (bSessionStarted) { FlushPressedKeys(); RaceManager->StartCareerRace(GetVehiclePawn()); }
+    if (bSessionStarted)
+    {
+        FlushPressedKeys();
+        auto* Career=GetGameInstance()->GetSubsystem<UADCareerSubsystem>();
+        auto* Ownership=GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
+        if (Career && Career->IsReady() && Ownership && Ownership->IsReady())
+        {
+            const FADCareerChapter* Chapter=Career->GetActiveChapter(Ownership->GetProfile());
+            const FADRaceDefinition* Race=Chapter ? RaceManager->GetRaceById(Chapter->RaceId) : nullptr;
+            if (Chapter && Race)
+            {
+                const FString CrewLine=FString::Printf(TEXT("%s  /  %s"),*Chapter->Crew,*Chapter->Leader);
+                const FString Narrative=Career->ComposeBriefing(Ownership->GetProfile(),*Chapter,*Race);
+                if (Cinematic->PlayCareerBriefing(Chapter->Title,CrewLine,Narrative)) return;
+            }
+        }
+        RaceManager->StartCareerRace(GetVehiclePawn());
+    }
 }
 
 void AADPlayerController::DifficultyInput()
@@ -537,13 +556,22 @@ void AADPlayerController::TogglePause()
 void AADPlayerController::ConfirmInput()
 {
     if (MapComponent->IsOpen()) { MapComponent->Confirm(); return; }
-    if (Cinematic->IsActive()) { Cinematic->TogglePlayback(); return; }
+    if (Cinematic->IsActive())
+    {
+        if (Cinematic->GetMode()==EADCinematicMode::Story) Cinematic->Leave();
+        else Cinematic->TogglePlayback();
+        return;
+    }
     if (AreSettingsOpen()) { GetGameInstance()->GetSubsystem<UADSettingsSubsystem>()->Confirm(); return; }
     if (GarageSession->IsActive()) { GarageSession->ConfirmSelection(); return; }
     if (RaceManager && RaceManager->HasPendingCareerReward()) { RaceManager->RetryCareerReward(); return; }
     if (bSessionPaused) { TogglePause(); }
     else if (RaceManager && RaceManager->GetState()==EADRaceState::Results) { RaceInput(); }
-    else if (!bSessionStarted) { BeginDriving(); }
+    else if (!bSessionStarted)
+    {
+        BeginDriving();
+        if (bSessionStarted) Cinematic->PlayArrivalCutscene();
+    }
 }
 
 void AADPlayerController::PointerInput()

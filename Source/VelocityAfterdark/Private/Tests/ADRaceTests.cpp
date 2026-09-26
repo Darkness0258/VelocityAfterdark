@@ -202,8 +202,14 @@ namespace ADRaceTests
                     || !Racer.Car->GetPhysics()->IsReady() || Position.Z < 0. || Position.Z > 1000.)
                 { Test->AddError(FString::Printf(TEXT("Racer %d produced an invalid physical state."), Index)); return false; }
                 if (Racer.RecoveryCount != 0 || Racer.bDNF)
-                { Test->AddError(FString::Printf(TEXT("Racer %d required recovery or DNF; lap %d gate %d at %s."), Index,
-                    Racer.Progress.CompletedLaps,Racer.Progress.NextCheckpoint,*Position.ToString())); return false; }
+                {
+                    const UADRaceDriverComponent* Driver=Index==0 ? PlayerDriver.Get() : Racer.Driver.Get();
+                    Test->AddError(FString::Printf(TEXT("Racer %d required recovery or DNF; lap %d gate %d at %s, speed %.1f km/h, route error %.1f m, recovery attempts %d, managed reset %d."), Index,
+                        Racer.Progress.CompletedLaps,Racer.Progress.NextCheckpoint,*Position.ToString(),
+                        Racer.Car->GetPhysics()->GetTelemetry().SpeedKmh,Driver ? Driver->GetRouteErrorM() : -1.f,
+                        Driver ? Driver->GetRecoveryAttemptCount() : -1,Driver && Driver->NeedsRecovery()));
+                    return false;
+                }
                 if (Manager->GetElapsedSeconds()>15. && !Racer.Progress.Started)
                 {
                     const auto& Telemetry=Racer.Car->GetPhysics()->GetTelemetry();

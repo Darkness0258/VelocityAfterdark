@@ -57,17 +57,22 @@ public:
     float GetRoadLengthMeters() const { return RoadLengthMeters; }
 
     FVector2D GetGroundHalfExtent() const { return GroundHalfExtent; }
+    int32 GetImportedDistrictMeshInstanceCount() const;
 
 private:
     bool LoadDefinition();
+    bool LoadDistrictArt();
     void BuildRoads();
     void BuildBlocks();
     void BuildStreetFurniture();
     bool IsIntersection(const FVector2D& Position, const FADRoadSegment& Current, float Padding = 0.f) const;
     bool IsOnRoad(const FVector2D& Position, float Padding = 0.f) const;
-    UHierarchicalInstancedStaticMeshComponent* GetBatch(FName MaterialName, bool bCollision, bool bCylinder = false);
+    UHierarchicalInstancedStaticMeshComponent* GetBatch(FName MaterialName, bool bCollision,
+        bool bCylinder = false, UStaticMesh* MeshOverride = nullptr);
     void AddBox(FName MaterialName, const FVector& Center, const FVector& Size, bool bCollision = false, float Yaw = 0.f);
     void AddCylinder(FName MaterialName, const FVector& Center, const FVector& Size);
+    void AddDistrictMesh(UStaticMesh* Mesh, const FVector& Center, const FVector& Size, float Yaw = 0.f);
+    void AddBuildingCollider(const FVector& Center, const FVector& Size, float Yaw = 0.f);
 
     UPROPERTY(VisibleAnywhere, Category = "Afterdark|Lighting")
     TObjectPtr<UDirectionalLightComponent> Moon;
@@ -83,6 +88,18 @@ private:
     TObjectPtr<UStaticMesh> Cube;
     UPROPERTY(Transient)
     TObjectPtr<UStaticMesh> Cylinder;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UStaticMesh>> DowntownTowerMeshes;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UStaticMesh>> DowntownMidriseMeshes;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UStaticMesh>> IndustrialWarehouseMeshes;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UStaticMesh>> ContainerMeshes;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UStaticMesh>> StreetLampMeshes;
+    UPROPERTY(Transient)
+    TObjectPtr<UStaticMesh> TrafficSignalMesh;
     // Hard reference lets the cooker discover the original CC0 static prop.
     UPROPERTY(EditDefaultsOnly, Category = "Afterdark|Environment", meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UStaticMesh> ParkedCityCarMesh;

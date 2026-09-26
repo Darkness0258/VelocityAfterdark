@@ -133,6 +133,22 @@ inline double SteeringLimitDegrees(double SpeedMps, double LowSpeedDegrees,
     return Lerp(HighSpeedDegrees, LowSpeedDegrees, 1.0 / (1.0 + Ratio * Ratio));
 }
 
+inline double DesiredYawRateRps(double ForwardSpeedMps,double SteeringDegrees,double WheelbaseM)
+{
+    if (!std::isfinite(ForwardSpeedMps) || !std::isfinite(SteeringDegrees)
+        || !std::isfinite(WheelbaseM) || WheelbaseM<0.5) return 0.0;
+    const double SteeringRadians=Clamp(SteeringDegrees,-45.0,45.0)*3.14159265358979323846/180.0;
+    return Clamp(ForwardSpeedMps,-100.0,100.0)*std::tan(SteeringRadians)/WheelbaseM;
+}
+
+inline double StabilityBrakeCorrectionN(double DesiredYawRate,double ActualYawRate,
+    double GainNPerRps=3500.0,double MaximumForceN=3500.0)
+{
+    if (!std::isfinite(DesiredYawRate) || !std::isfinite(ActualYawRate)) return 0.0;
+    return Clamp((DesiredYawRate-ActualYawRate)*Clamp(GainNPerRps,0.0,10000.0),
+        -Clamp(MaximumForceN,0.0,10000.0),Clamp(MaximumForceN,0.0,10000.0));
+}
+
 inline double AerodynamicDragN(double SpeedMps, double Cd, double FrontalAreaM2)
 {
     const double Speed = Clamp(SpeedMps, -200.0, 200.0);

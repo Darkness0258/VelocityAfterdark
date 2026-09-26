@@ -252,6 +252,12 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
         Definition.MaxSteeringDegrees, Definition.HighSpeedSteeringDegrees, Definition.SteeringFalloffMps));
     SteeringDegrees = static_cast<float>(ADVehicleMath::Smooth(SteeringDegrees, SteeringInput * SteeringLimit,
         Definition.SteeringResponsePerSecond, Dt));
+    const double WheelbaseM=FMath::Max(.5,static_cast<double>(Definition.WheelAnchorsCm[0].X-Definition.WheelAnchorsCm[2].X)*.01);
+    const double DesiredYawRate=ADVehicleMath::DesiredYawRateRps(ForwardSpeedMps,SteeringDegrees,WheelbaseM);
+    const double ActualYawRate=FVector::DotProduct(Chassis->GetPhysicsAngularVelocityInRadians(),Up);
+    const float YawError=ForwardSpeedMps>4.f && bStabilityControl
+        ? static_cast<float>(DesiredYawRate-ActualYawRate) : 0.f;
+    const float StabilityBrakeN=static_cast<float>(ADVehicleMath::StabilityBrakeCorrectionN(YawError,0.0,3500.0,3500.0));
 
     const float UnclampedRoadRpm = static_cast<float>(ADVehicleMath::WheelRpm(ForwardSpeedMps, Definition.WheelRadiusM))
         * FMath::Abs(GetGearRatio()) * Definition.FinalDrive;
@@ -309,6 +315,9 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
             if (bTractionControl) DriveN = FMath::Clamp(DriveN, -CapacityN * .9f, CapacityN * .9f);
             const float BrakeShare = Index < 2 ? Definition.FrontBrakeBias * .5f : (1.f - Definition.FrontBrakeBias) * .5f;
             float RequestedBrakeN = Definition.MaxBrakeForceN * BrakeInput * BrakeShare;
+            const float WheelSide=FMath::Sign(Definition.WheelAnchorsCm[Index].Y);
+            if (YawError*WheelSide>0.f)
+                RequestedBrakeN+=FMath::Abs(StabilityBrakeN)*(Index<2 ? .3f : .7f);
             if (bRearHandbrake) RequestedBrakeN = FMath::Max(RequestedBrakeN, Definition.MaxBrakeForceN * .5f);
             if (bAntiLockBrakes && !bRearHandbrake) RequestedBrakeN = FMath::Min(RequestedBrakeN, CapacityN * .9f);
             const float EngineBrakeN = (1.f - ThrottleInput) * GetDriveShare(Index) *
@@ -346,6 +355,7 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
         }
     }
     Telemetry.SpeedKmh = SpeedMps * 3.6f;
+    Telemetry.StabilityIntervention=FMath::Clamp(FMath::Abs(StabilityBrakeN)/3500.f,0.f,1.f);
     Telemetry.Rpm = CurrentRpm;
     Telemetry.Gear = CurrentGear;
     Telemetry.Throttle = ThrottleInput;

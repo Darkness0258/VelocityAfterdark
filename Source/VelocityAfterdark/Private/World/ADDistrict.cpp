@@ -124,6 +124,11 @@ void AADDistrict::BeginPlay()
         LoadError = TEXT("Engine basic shape assets are missing from the build.");
         return;
     }
+    if (!LoadDistrictArt())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Dockside art load failed: %s"), *LoadError);
+        return;
+    }
     const TCHAR* Required[] = { TEXT("M_Asphalt"), TEXT("M_Concrete"), TEXT("M_Building"),
         TEXT("M_WindowWarm"), TEXT("M_WindowCool"), TEXT("M_Metal"), TEXT("M_RoadMarking"),
         TEXT("M_EmissiveWhite"), TEXT("M_EmissiveRed"), TEXT("M_ContainerBlue"),
@@ -153,7 +158,64 @@ void AADDistrict::BeginPlay()
         Pair.Value->BuildTreeIfOutdated(false, true);
     }
     bReady = true;
-    UE_LOG(LogTemp, Display, TEXT("Dockside ready: %.0fm of roads, %d instance batches."), RoadLengthMeters, Batches.Num());
+    UE_LOG(LogTemp, Display, TEXT("Dockside ready: %.0fm roads, %d instance batches, %d imported building/prop instances."),
+        RoadLengthMeters, Batches.Num(), GetImportedDistrictMeshInstanceCount());
+}
+
+bool AADDistrict::LoadDistrictArt()
+{
+    const auto LoadFamily = [this](const TCHAR* Directory,const TArray<FString>& Names,
+        TArray<TObjectPtr<UStaticMesh>>& Destination)
+    {
+        for (const FString& Name:Names)
+        {
+            const FString Path=FString::Printf(TEXT("%s/%s.%s"),Directory,*Name,*Name);
+            UStaticMesh* Mesh=LoadObject<UStaticMesh>(nullptr,*Path);
+            if (!Mesh)
+            {
+                LoadError=FString::Printf(TEXT("Required Dockside city-kit mesh is missing: %s"),*Path);
+                return false;
+            }
+            Destination.Add(Mesh);
+        }
+        return !Destination.IsEmpty();
+    };
+    const TCHAR* Commercial=TEXT("/Game/Velocity/External/KenneyCityKitCommercial");
+    const TCHAR* Industrial=TEXT("/Game/Velocity/External/KenneyCityKitIndustrial");
+    const TCHAR* RoadsKit=TEXT("/Game/Velocity/External/KenneyCityKitRoads");
+    if (!LoadFamily(Commercial,
+            {TEXT("SM_Kenney_Commercial_SkyscraperA"),TEXT("SM_Kenney_Commercial_SkyscraperB"),
+             TEXT("SM_Kenney_Commercial_SkyscraperC"),TEXT("SM_Kenney_Commercial_SkyscraperD"),
+             TEXT("SM_Kenney_Commercial_SkyscraperE")},DowntownTowerMeshes)
+        || !LoadFamily(Commercial,
+            {TEXT("SM_Kenney_Commercial_BuildingA"),TEXT("SM_Kenney_Commercial_BuildingD"),
+             TEXT("SM_Kenney_Commercial_BuildingH"),TEXT("SM_Kenney_Commercial_BuildingN")},DowntownMidriseMeshes)
+        || !LoadFamily(Industrial,
+            {TEXT("SM_Kenney_Industrial_BuildingA"),TEXT("SM_Kenney_Industrial_BuildingD"),
+             TEXT("SM_Kenney_Industrial_BuildingH"),TEXT("SM_Kenney_Industrial_BuildingM"),
+             TEXT("SM_Kenney_Industrial_BuildingQ"),TEXT("SM_Kenney_Industrial_BuildingT")},IndustrialWarehouseMeshes)
+        || !LoadFamily(Industrial,
+            {TEXT("SM_Kenney_Industrial_ContainerA"),TEXT("SM_Kenney_Industrial_ContainerC")},ContainerMeshes)
+        || !LoadFamily(RoadsKit,
+            {TEXT("SM_Kenney_Roads_LampCurved"),TEXT("SM_Kenney_Roads_LampSquare")},StreetLampMeshes))
+        return false;
+    TrafficSignalMesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Velocity/External/KenneyCityKitRoads/SM_Kenney_Roads_TrafficLight.SM_Kenney_Roads_TrafficLight"));
+    if (!TrafficSignalMesh)
+    {
+        LoadError=TEXT("Required Dockside road signal mesh is missing.");
+        return false;
+    }
+    return true;
+}
+
+int32 AADDistrict::GetImportedDistrictMeshInstanceCount() const
+{
+    int32 Count=0;
+    for (const auto& Entry:Batches)
+        if (IsValid(Entry.Value) && IsValid(Entry.Value->GetStaticMesh())
+            && Entry.Value->GetStaticMesh()->GetName().StartsWith(TEXT("SM_Kenney_")))
+            Count+=Entry.Value->GetInstanceCount();
+    return Count;
 }
 
 bool AADDistrict::LoadDefinition()
@@ -261,19 +323,22 @@ bool AADDistrict::LoadDefinition()
     return true;
 }
 
-UHierarchicalInstancedStaticMeshComponent* AADDistrict::GetBatch(FName MaterialName, bool bCollision, bool bCylinder)
+UHierarchicalInstancedStaticMeshComponent* AADDistrict::GetBatch(FName MaterialName, bool bCollision,
+    bool bCylinder, UStaticMesh* MeshOverride)
 {
-    const FName Key(*FString::Printf(TEXT("%s_%d_%d"), *MaterialName.ToString(), bCollision, bCylinder));
+    const FName Key=MeshOverride
+        ? FName(*FString::Printf(TEXT("%s_%s_%d"),*MaterialName.ToString(),*MeshOverride->GetName(),bCollision))
+        : FName(*FString::Printf(TEXT("%s_%d_%d"),*MaterialName.ToString(),bCollision,bCylinder));
     if (const auto* Existing = Batches.Find(Key)) return Existing->Get();
     auto* Batch = NewObject<UHierarchicalInstancedStaticMeshComponent>(this, Key);
     Batch->SetupAttachment(RootComponent);
     Batch->SetMobility(EComponentMobility::Static);
-    Batch->SetStaticMesh(bCylinder ? Cylinder.Get() : Cube.Get());
-    Batch->SetMaterial(0, Materials.FindChecked(MaterialName));
+    Batch->SetStaticMesh(MeshOverride ? MeshOverride : bCylinder ? Cylinder.Get() : Cube.Get());
+    if (Materials.Contains(MaterialName)) Batch->SetMaterial(0, Materials.FindChecked(MaterialName));
     Batch->SetCollisionProfileName(bCollision ? TEXT("BlockAll") : TEXT("NoCollision"));
     Batch->SetGenerateOverlapEvents(false);
     Batch->SetCanEverAffectNavigation(false);
-    Batch->SetCastShadow(bCollision);
+    Batch->SetCastShadow(bCollision || MeshOverride != nullptr);
     // Collision geometry never vanishes visually. Small dressing can be culled.
     if (!bCollision) Batch->SetCullDistances(45000, 65000);
     Batch->bAutoRebuildTreeOnInstanceChanges = false;
@@ -291,6 +356,29 @@ void AADDistrict::AddBox(FName MaterialName, const FVector& Center, const FVecto
 void AADDistrict::AddCylinder(FName MaterialName, const FVector& Center, const FVector& Size)
 {
     GetBatch(MaterialName, false, true)->AddInstance(FTransform(FQuat::Identity, Center, Size / 100.));
+}
+
+void AADDistrict::AddDistrictMesh(UStaticMesh* Mesh,const FVector& Center,const FVector& Size,float Yaw)
+{
+    if (!Mesh || Size.ContainsNaN() || Size.GetMin()<=0.f) return;
+    UHierarchicalInstancedStaticMeshComponent* Batch=GetBatch(TEXT("KenneyCityKit"),false,false,Mesh);
+    const FBoxSphereBounds Bounds=Mesh->GetBounds();
+    const FVector MeshSize=Bounds.BoxExtent*2.f;
+    if (MeshSize.ContainsNaN() || MeshSize.GetMin()<=KINDA_SMALL_NUMBER) return;
+    const FVector Scale=Size/MeshSize;
+    const FRotator Rotation(0,Yaw,0);
+    const FVector Origin=Center-Rotation.RotateVector(Bounds.Origin*Scale);
+    Batch->AddInstance(FTransform(Rotation,Origin,Scale));
+}
+
+void AADDistrict::AddBuildingCollider(const FVector& Center,const FVector& Size,float Yaw)
+{
+    UHierarchicalInstancedStaticMeshComponent* Batch=GetBatch(TEXT("M_Building"),true);
+    // The original cuboids remain as query/physics proxies only; the imported
+    // static meshes provide all visible facades and shadows.
+    Batch->SetVisibility(false);
+    Batch->SetCastShadow(false);
+    Batch->AddInstance(FTransform(FRotator(0,Yaw,0),Center,Size/100.f));
 }
 
 bool AADDistrict::IsIntersection(const FVector2D& Position, const FADRoadSegment& Current, float Padding) const
@@ -356,11 +444,31 @@ void AADDistrict::BuildBlocks()
                 const int32 Stack = FMath::Clamp(FMath::FloorToInt(Height / 280), 1, 3);
                 for (int32 Layer = 0; Layer < Stack; ++Layer)
                 {
-                    const FName Color = ((X + Y + Layer) % 3 == 0) ? TEXT("M_ContainerRust") : TEXT("M_ContainerBlue");
-                    AddBox(Color, FVector(P, 140 + Layer * 285), FVector(1200, 245, 280), true);
-                    for (int32 Rib = -5; Rib <= 5; ++Rib)
-                        AddBox(TEXT("M_Metal"), FVector(P + FVector2D(Rib * 100, -125), 140 + Layer * 285), FVector(10, 5, 260));
+                    const FVector Center(P,140+Layer*285);
+                    const FVector Size(1200,245,280);
+                    const int32 Variant=FMath::Abs(X*31+Y*17+Layer)%ContainerMeshes.Num();
+                    AddBuildingCollider(Center,Size);
+                    // Kit container length is on local Y; rotate it to retain
+                    // Dockside's east-west stack layout and true 12 m length.
+                    AddDistrictMesh(ContainerMeshes[Variant],Center,FVector(245,1200,280),90.f);
                 }
+                continue;
+            }
+
+            UStaticMesh* BuildingMesh=nullptr;
+            if (Block.Kind==TEXT("warehouse"))
+                BuildingMesh=IndustrialWarehouseMeshes[Random.RandRange(0,IndustrialWarehouseMeshes.Num()-1)].Get();
+            else if (Block.Kind==TEXT("tower"))
+                BuildingMesh=DowntownTowerMeshes[Random.RandRange(0,DowntownTowerMeshes.Num()-1)].Get();
+            else
+                BuildingMesh=DowntownMidriseMeshes[Random.RandRange(0,DowntownMidriseMeshes.Num()-1)].Get();
+            const float BuildingYaw=Random.RandRange(0,3)*90.f;
+            if (BuildingMesh)
+            {
+                const FVector BuildingCenter(P,Height*.5f);
+                const FVector BuildingSize(Width,Depth,Height);
+                AddBuildingCollider(BuildingCenter,BuildingSize,BuildingYaw);
+                AddDistrictMesh(BuildingMesh,BuildingCenter,BuildingSize,BuildingYaw);
                 continue;
             }
             AddBox(TEXT("M_Building"), FVector(P, Height * .5), FVector(Width, Depth, Height), true);
@@ -476,6 +584,7 @@ void AADDistrict::BuildStreetFurniture()
     {
         const FVector2D Direction = (Road.End - Road.Start).GetSafeNormal();
         const FVector2D Side(-Direction.Y, Direction.X);
+        const float Heading=FMath::RadiansToDegrees(FMath::Atan2(Direction.Y,Direction.X));
         const float Length = static_cast<float>((Road.End - Road.Start).Size());
         for (float Distance = 1800; Distance < Length; Distance += StreetLightSpacing)
         {
@@ -485,12 +594,40 @@ void AADDistrict::BuildStreetFurniture()
             {
                 const FVector2D Pole = P + Side * (Sign * (RoadWidth * .5 + 380));
                 const FVector2D Lamp = P + Side * (Sign * (RoadWidth * .5 - 40));
-                AddCylinder(TEXT("M_Metal"), FVector(Pole, 520), FVector(20, 20, 1040));
-                AddBox(TEXT("M_Metal"), FVector((Pole + Lamp) * .5, 1040), FVector(FMath::Abs(Side.X) * 420 + 20, FMath::Abs(Side.Y) * 420 + 20, 20));
+                const int32 LampIndex=(FMath::FloorToInt(Distance/StreetLightSpacing)+(Sign>0.f ? 1 : 0))%StreetLampMeshes.Num();
+                const float LampYaw=Heading+(Sign>0.f ? 180.f : 0.f);
+                AddDistrictMesh(StreetLampMeshes[LampIndex],FVector((Pole+Lamp)*.5,520.f),
+                    FVector(70.f,260.f,1040.f),LampYaw);
                 const bool bWarm = P.Y <= 0;
                 AddBox(bWarm ? TEXT("M_WindowWarm") : TEXT("M_EmissiveWhite"), FVector(Lamp, 1030), FVector(100, 80, 16));
                 Lamps.Add({ FVector(Lamp, 1000), bWarm });
             }
+        }
+    }
+
+    // Signal posts are placed once per perpendicular approach. They are static
+    // kit geometry; traffic control and right-of-way remain owned by AI logic.
+    for (const auto& Road:Roads)
+    {
+        const FVector2D Direction=(Road.End-Road.Start).GetSafeNormal();
+        for (const bool bAtEnd:{false,true})
+        {
+            const FVector2D Endpoint=bAtEnd ? Road.End : Road.Start;
+            bool bCrossStreet=false;
+            for (const auto& Other:Roads)
+            {
+                if (Other.Id==Road.Id) continue;
+                const FVector2D OtherDirection=(Other.End-Other.Start).GetSafeNormal();
+                if (FMath::Abs(FVector2D::DotProduct(Direction,OtherDirection))<.5f
+                    && InsideRoad(Endpoint,Other,RoadWidth*.5+100.f))
+                { bCrossStreet=true; break; }
+            }
+            if (!bCrossStreet) continue;
+            const FVector2D Approach=bAtEnd ? Direction : -Direction;
+            const FVector2D Right(Approach.Y,-Approach.X);
+            const FVector2D Position=Endpoint+Right*(RoadWidth*.5+220.f)-Approach*450.f;
+            const float SignalYaw=FMath::RadiansToDegrees(FMath::Atan2(Approach.Y,Approach.X));
+            AddDistrictMesh(TrafficSignalMesh,FVector(Position,260.f),FVector(70.f,70.f,520.f),SignalYaw);
         }
     }
     // Light objects have a hard bound, independent of scenery density. Emissive

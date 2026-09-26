@@ -1,6 +1,7 @@
 #include "Presentation/ADCinematicComponent.h"
 #include "Player/ADPlayerController.h"
 #include "Player/ADVehiclePawn.h"
+#include "Racing/ADRaceManager.h"
 #include "Vehicle/ADVehiclePhysicsComponent.h"
 #include "Garage/ADGarageSessionComponent.h"
 #include "Camera/CameraActor.h"
@@ -49,6 +50,40 @@ UADCinematicComponent::UADCinematicComponent()
 
 bool UADCinematicComponent::EnterPhoto() { return Enter(EADCinematicMode::Photo); }
 bool UADCinematicComponent::EnterReplay() { return Enter(EADCinematicMode::Replay); }
+bool UADCinematicComponent::PlayArrivalCutscene()
+{
+    return StartStory(TEXT("ARRIVAL / DOCKSIDE"),TEXT("NOVA CITY  /  11:43 PM"),
+        TEXT("A rain-muted broadcast carries a name through the static: Tidewire. Beneath the highway, three cars wait for a driver no one knows."),
+        TEXT("FOLLOW THE SIGNAL"),false);
+}
+
+bool UADCinematicComponent::PlayCareerBriefing(const FString& ChapterTitle,const FString& CrewLine,const FString& Narrative)
+{
+    if (ChapterTitle.IsEmpty() || CrewLine.IsEmpty() || Narrative.IsEmpty()) return false;
+    return StartStory(ChapterTitle,CrewLine,Narrative,TEXT("TAKE YOUR PLACE ON THE GRID"),true);
+}
+
+bool UADCinematicComponent::StartStory(const FString& Title,const FString& Attribution,const FString& Narrative,
+    const FString& Closing,bool bInContinueToCareerRace)
+{
+    if (!Enter(EADCinematicMode::Story)) return false;
+    StoryTitle=Title;
+    StoryAttribution=Attribution;
+    StoryNarrative=Narrative;
+    StoryClosing=Closing;
+    StorySeconds=0.f;
+    bContinueToCareerRace=bInContinueToCareerRace;
+    Message=Title;
+    UpdateStory(0.f);
+    return true;
+}
+
+const FString& UADCinematicComponent::GetStorySubtitle() const
+{
+    if (StorySeconds<2.f) return StoryAttribution;
+    if (StorySeconds<8.f) return StoryNarrative;
+    return StoryClosing;
+}
 
 bool UADCinematicComponent::Enter(EADCinematicMode Desired)
 {
@@ -108,7 +143,7 @@ bool UADCinematicComponent::Enter(EADCinematicMode Desired)
     bPlaying=true; bHidden=false;
     Message=Desired==EADCinematicMode::Photo
         ? TEXT("PHOTO MODE / 1-4 LOOK / R-F FOCUS / T-G APERTURE / [ ] EXPOSURE")
-        : TEXT("DRIVE REPLAY / VEHICLE ONLY");
+        : Desired==EADCinematicMode::Replay ? TEXT("DRIVE REPLAY / VEHICLE ONLY") : TEXT("STORY SEQUENCE");
     return true;
 }
 
@@ -185,7 +220,8 @@ void UADCinematicComponent::TickComponent(float DeltaTime,ELevelTick TickType,FA
     LastWallSeconds=Now;
     if (!Vehicle.IsValid() || !Camera) { Leave(); return; }
     if (Mode==EADCinematicMode::Photo) UpdatePhoto(RealDelta);
-    else UpdateReplay(RealDelta);
+    else if (Mode==EADCinematicMode::Replay) UpdateReplay(RealDelta);
+    else if (Mode==EADCinematicMode::Story) UpdateStory(RealDelta);
     if (CaptureHideFrames>0) --CaptureHideFrames;
 }
 
@@ -284,6 +320,28 @@ void UADCinematicComponent::UpdateReplay(float Step)
     if (ReplaySeconds>=GetReplayDuration()) bPlaying=false;
 }
 
+void UADCinematicComponent::UpdateStory(float Step)
+{
+    if (!Vehicle.IsValid() || !Camera) { Leave(); return; }
+    StorySeconds=FMath::Min(StoryDurationSeconds,StorySeconds+FMath::Max(0.f,Step));
+    const float Progress=FMath::Clamp(StorySeconds/StoryDurationSeconds,0.f,1.f);
+    const float Track=Progress*3.f;
+    const int32 Segment=FMath::Min(2,FMath::FloorToInt(Track));
+    const float RawAlpha=FMath::Clamp(Track-Segment,0.f,1.f);
+    const float Alpha=RawAlpha*RawAlpha*(3.f-2.f*RawAlpha);
+    const FVector CameraOffsets[] = {
+        FVector(-980.f,-780.f,470.f), FVector(-650.f,870.f,300.f),
+        FVector(250.f,920.f,245.f), FVector(720.f,-260.f,150.f)
+    };
+    const FVector A=ReturnPose.TransformPosition(CameraOffsets[Segment]);
+    const FVector B=ReturnPose.TransformPosition(CameraOffsets[Segment+1]);
+    const FVector Position=FMath::Lerp(A,B,Alpha);
+    const FVector Focus=Vehicle->GetActorLocation()+FVector(0.f,0.f,58.f);
+    Camera->SetActorLocationAndRotation(Position,(Focus-Position).Rotation());
+    Camera->GetCameraComponent()->SetFieldOfView(42.f+FMath::Sin(Progress*PI)*3.f);
+    if (StorySeconds>=StoryDurationSeconds) Leave();
+}
+
 void UADCinematicComponent::Capture()
 {
     if (!IsActive()) return;
@@ -299,6 +357,7 @@ void UADCinematicComponent::Leave()
 {
     if (!IsActive()) return;
     auto* PC=Cast<AADPlayerController>(GetOwner());
+    const bool bStartCareerRace=Mode==EADCinematicMode::Story && bContinueToCareerRace;
     if (Vehicle.IsValid() && !Vehicle->IsActorBeingDestroyed())
     {
         if (Mode==EADCinematicMode::Replay)
@@ -322,6 +381,13 @@ void UADCinematicComponent::Leave()
     }
     if (Camera) Camera->Destroy();
     Camera=nullptr; Playback.Reset(); Mode=EADCinematicMode::None; bHidden=false; CaptureHideFrames=0;
+    bContinueToCareerRace=false; StorySeconds=0.f;
+    StoryTitle.Reset(); StoryAttribution.Reset(); StoryNarrative.Reset(); StoryClosing.Reset();
+    if (bStartCareerRace && PC && PC->GetRaceManager() && PC->GetVehiclePawn()
+        && !PC->GetRaceManager()->StartCareerRace(PC->GetVehiclePawn()))
+    {
+        UE_LOG(LogTemp,Warning,TEXT("Career briefing ended but its race could not be started."));
+    }
 }
 void UADCinematicComponent::EndPlay(const EEndPlayReason::Type Reason)
 { Leave(); Super::EndPlay(Reason); }

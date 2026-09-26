@@ -1,6 +1,7 @@
 #include "Player/ADVehiclePawn.h"
 #include "Audio/ADEngineSynthComponent.h"
 #include "Core/ADGameMode.h"
+#include "World/ADAtmosphere.h"
 #include "Vehicle/ADVehiclePhysicsComponent.h"
 #include "Vehicle/ADVehicleEffectsComponent.h"
 #include "Settings/ADSettingsSubsystem.h"
@@ -15,6 +16,7 @@
 #include "Sound/SoundAttenuation.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "HAL/PlatformTime.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "KismetProceduralMeshLibrary.h"
@@ -139,6 +141,7 @@ void AADVehiclePawn::BeginPlay()
         Chassis->SetBoxExtent(FVector(Definition.BodyLengthCm*.5f-18.f,Definition.BodyWidthCm*.5f-3.f,24.f),true);
     }
     BuildVehicle();
+    for (TActorIterator<AADAtmosphere> It(GetWorld()); It; ++It) { Atmosphere=*It; break; }
     if (!HasAuthority()) { VehiclePhysics->SetComponentTickEnabled(false); SetPaintColor(NetworkPaint); }
     SetDrivingEnabled(false);
     if (!HasAuthority()) { OnRepTelemetry(); OnRepEffects(); }
@@ -357,6 +360,21 @@ void AADVehiclePawn::BuildVehicle()
             FVector(6.25f*FMath::Cos(Radians),6.25f*FMath::Sin(Radians),0),
             FVector(.105,.021,.018),Metal,false,FRotator(0,Angle,0));
         Bar->AttachToComponent(SteeringWheel,FAttachmentTransformRules::KeepRelativeTransform);
+    }
+    // Functional wipers bring the wet-weather cockpit to life. The sweep rate
+    // follows current precipitation and parks cleanly as the rain stops.
+    for (int32 Side : {-1,1})
+    {
+        const FString Suffix=Side<0 ? TEXT("L") : TEXT("R");
+        USceneComponent* Pivot=NewObject<USceneComponent>(this,*FString(TEXT("WiperPivot")+Suffix));
+        AddInstanceComponent(Pivot);
+        Pivot->SetupAttachment(Chassis);
+        Pivot->SetRelativeLocation(FVector(105.f,Side*15.f,40.f));
+        Pivot->RegisterComponent();
+        WiperPivots.Add(Pivot);
+        UStaticMeshComponent* Blade=AddPiece(FName(*FString(TEXT("WiperBlade")+Suffix)),
+            FVector(0.f,Side*27.f,0.f),FVector(.018f,.30f,.014f),Rubber);
+        Blade->AttachToComponent(Pivot,FAttachmentTransformRules::KeepRelativeTransform);
     }
     AddPiece(TEXT("InstrumentCluster"), FVector(70,-36,32), FVector(.02,.34,.12), Metal);
     for (int32 I = 0; I < 4; ++I)
@@ -590,6 +608,15 @@ void AADVehiclePawn::UpdatePresentation(float DeltaSeconds)
     if (SteeringWheel) { SteeringWheel->SetRelativeRotation(FRotator(75,0,State.Steering*170)); }
     const bool bBraking = bDrivingEnabled && State.Brake > 0.02f;
     for (UPointLightComponent* Light : BrakeLights) { Light->SetIntensity(bBraking ? 180 : 20); }
+    if (Atmosphere.IsValid() && !WiperPivots.IsEmpty())
+    {
+        const float Rain=Atmosphere->GetRainIntensity();
+        if (Rain>.035f) WiperPhase=FMath::Fmod(WiperPhase+DeltaSeconds*FMath::Lerp(.7f,1.6f,Rain),1.f);
+        else WiperPhase=FMath::FInterpTo(WiperPhase,0.f,DeltaSeconds,.35f);
+        const float Sweep=Rain>.035f ? FMath::Sin(WiperPhase*2.f*PI)*34.f : 0.f;
+        for (int32 Index=0;Index<WiperPivots.Num();++Index)
+            WiperPivots[Index]->SetRelativeRotation(FRotator(0.f,0.f,Sweep*(Index==0 ? 1.f : -1.f)));
+    }
     EngineAudio->SetEngineTargets(State.Rpm,State.Throttle,State.SpeedKmh,CameraMode == EADCameraMode::Cockpit);
     if (bRaceOpponent || bInGarage) return; // Only the local player's driving camera needs presentation updates.
     const float SpeedAlpha = FMath::Clamp(FMath::Abs(State.SpeedKmh)/250.0f,0.0f,1.0f);

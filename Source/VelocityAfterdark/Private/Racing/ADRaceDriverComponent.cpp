@@ -14,6 +14,27 @@ namespace
     constexpr double SenseIntervalSeconds = .1;
     constexpr double BrakingDecelerationMps2 = 3.5;
     constexpr double MinimumLaneSeparationCm = 250.;
+
+    double RouteProgressForDriver(const FADRaceDefinition& Route, const FVector& Position, const FVector& Forward,
+        double& OutErrorM)
+    {
+        double ProgressM = Route.ClosestDistanceM(Position, OutErrorM);
+        if (Route.Laps != 0 || Route.RoutePoints.Num() < 2) return ProgressM;
+
+        // Open sprint routes clamp every car staged before the start gate to
+        // distance zero. Preserve signed approach distance so the grid and the
+        // first few seconds of traffic sensing have a real front-to-back order.
+        const FVector2D Start = Route.RoutePoints[0].Position;
+        const FVector2D Tangent = (Route.RoutePoints[1].Position - Start).GetSafeNormal();
+        const FVector2D Delta(Position.X - Start.X, Position.Y - Start.Y);
+        const double AlongM = FVector2D::DotProduct(Delta, Tangent) * .01;
+        const FVector2D Heading(Forward.X, Forward.Y);
+        if (AlongM >= 0. || AlongM < -150. || FVector2D::DotProduct(Heading.GetSafeNormal(), Tangent) < .5)
+            return ProgressM;
+
+        OutErrorM = FMath::Abs(Delta.X * Tangent.Y - Delta.Y * Tangent.X) * .01;
+        return AlongM;
+    }
 }
 
 UADRaceDriverComponent::UADRaceDriverComponent()
@@ -145,7 +166,7 @@ void UADRaceDriverComponent::ResetDriver()
         // Immediately aiming at the preferred lane can cut across the grid.
         double ErrorM=0.;
         const FVector Position=Vehicle->GetActorLocation();
-        const double ProgressM=Definition->ClosestDistanceM(Position,ErrorM);
+        const double ProgressM=RouteProgressForDriver(*Definition,Position,Vehicle->GetActorForwardVector(),ErrorM);
         CurrentLaneOffsetCm=FMath::Clamp(FVector2D::DotProduct(FVector2D(Position.X,Position.Y)-
             Definition->PointAtDistance(ProgressM),RouteRightAt(ProgressM)),-MaxLaneOffsetCm,MaxLaneOffsetCm);
         DesiredLaneOffsetCm=CurrentLaneOffsetCm;
@@ -222,7 +243,7 @@ bool UADRaceDriverComponent::IsLaneClear(double OffsetCm, double ProgressM) cons
         if (!Other.IsValid()) continue;
         double OtherErrorM = 0.;
         const FVector Position = Other->GetActorLocation();
-        const double OtherProgress = Definition->ClosestDistanceM(Position, OtherErrorM);
+        const double OtherProgress = RouteProgressForDriver(*Definition,Position,Other->GetActorForwardVector(),OtherErrorM);
         const double Gap = SignedRouteGapM(OtherProgress, ProgressM);
         if (OtherErrorM > 12. || Gap < -15. || Gap > 45.) continue;
         const FVector2D Center = Definition->PointAtDistance(OtherProgress);
@@ -259,7 +280,7 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
         if (!Other.IsValid()) continue;
         double OtherErrorM = 0.;
         const FVector OtherPosition = Other->GetActorLocation();
-        const double OtherProgress = Definition->ClosestDistanceM(OtherPosition, OtherErrorM);
+        const double OtherProgress = RouteProgressForDriver(*Definition,OtherPosition,Other->GetActorForwardVector(),OtherErrorM);
         const double Gap = SignedRouteGapM(OtherProgress, ProgressM);
         if (OtherErrorM > 12.) continue;
         const double OtherOffset = FVector2D::DotProduct(FVector2D(OtherPosition.X, OtherPosition.Y) -
@@ -278,7 +299,8 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
     if (PassingVehicle.IsValid())
     {
         double IgnoredError = 0.;
-        const double Gap = SignedRouteGapM(Definition->ClosestDistanceM(PassingVehicle->GetActorLocation(), IgnoredError), ProgressM);
+        const double Gap = SignedRouteGapM(RouteProgressForDriver(*Definition,PassingVehicle->GetActorLocation(),
+            PassingVehicle->GetActorForwardVector(),IgnoredError), ProgressM);
         if (Gap < -8.)
         {
             ++OvertakeCount;
@@ -342,6 +364,16 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
 
 void UADRaceDriverComponent::BeginRecovery(float ForwardSteering)
 {
+    UE_LOG(LogTemp, Warning, TEXT("Race driver recovery: %s, route error %.1fm, speed %.1fkm/h gear %d rpm %.0f grounded %d, steering %.2f, target %.1fm/s obstacle %.1fm, throttle %.2f brake %.2f, stuck %.2fs off-route %.2fs, at %s."),
+        Vehicle.IsValid() ? *Vehicle->GetName() : TEXT("missing vehicle"),RouteErrorM,
+        Vehicle.IsValid() && Vehicle->GetPhysics() ? Vehicle->GetPhysics()->GetTelemetry().SpeedKmh : 0.f,
+        Vehicle.IsValid() && Vehicle->GetPhysics() ? Vehicle->GetPhysics()->GetTelemetry().Gear : 0,
+        Vehicle.IsValid() && Vehicle->GetPhysics() ? Vehicle->GetPhysics()->GetTelemetry().Rpm : 0.f,
+        Vehicle.IsValid() && Vehicle->GetPhysics() ? Vehicle->GetPhysics()->GetTelemetry().GroundedWheels : 0,
+        ForwardSteering,TargetSpeedMps,ObstacleClearanceM,
+        Vehicle.IsValid() && Vehicle->GetPhysics() ? Vehicle->GetPhysics()->GetTelemetry().Throttle : 0.f,
+        Vehicle.IsValid() && Vehicle->GetPhysics() ? Vehicle->GetPhysics()->GetTelemetry().Brake : 0.f,
+        StuckSeconds,OffRouteSeconds,Vehicle.IsValid() ? *Vehicle->GetActorLocation().ToCompactString() : TEXT("missing"));
     if (ConsecutiveRecoveryAttempts >= 2) { RequestManagedRecovery(); return; }
     ++ConsecutiveRecoveryAttempts;
     ++RecoveryAttemptCount;
@@ -354,6 +386,11 @@ void UADRaceDriverComponent::BeginRecovery(float ForwardSteering)
 
 void UADRaceDriverComponent::RequestManagedRecovery()
 {
+    UE_LOG(LogTemp,Warning,TEXT("Managed race recovery: %s at %s, speed %.1f km/h, route error %.1fm, overturned %.2fs, stuck %.2fs, off-route %.2fs, recovery %.2fs."),
+        Vehicle.IsValid() ? *Vehicle->GetName() : TEXT("missing"),
+        Vehicle.IsValid() ? *Vehicle->GetActorLocation().ToCompactString() : TEXT("missing"),
+        Vehicle.IsValid() && Vehicle->GetPhysics() ? Vehicle->GetPhysics()->GetTelemetry().SpeedKmh : 0.f,
+        RouteErrorM,OverturnedSeconds,StuckSeconds,OffRouteSeconds,RecoverySeconds);
     bNeedsRecovery = true;
     SetDriving(false);
 }
@@ -448,7 +485,7 @@ void UADRaceDriverComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     const FADVehicleDefinition& CarDefinition = Physics->GetDefinition();
     const double RearX = (CarDefinition.WheelAnchorsCm[2].X + CarDefinition.WheelAnchorsCm[3].X) * .5;
     const FVector RearWorld = Position + Vehicle->GetActorForwardVector() * RearX;
-    const double ProgressM = Definition->ClosestDistanceM(RearWorld, RouteErrorM);
+    const double ProgressM = RouteProgressForDriver(*Definition,RearWorld,Vehicle->GetActorForwardVector(),RouteErrorM);
     if (!FMath::IsFinite(ProgressM) || !FMath::IsFinite(RouteErrorM) || RouteErrorM > 25.)
     { RequestManagedRecovery(); return; }
     double DesiredSpeedMps = CruiseSpeedMps * DriverSpeedScale;
@@ -475,11 +512,15 @@ void UADRaceDriverComponent::TickComponent(float DeltaTime, ELevelTick TickType,
         // Both participants in a following gap must use chassis centers. Mixing
         // our rear axle with another car's center makes abreast cars look ahead.
         double CenterErrorM=0.;
-        Sense(Definition->ClosestDistanceM(Position,CenterErrorM), SpeedMps, DesiredSpeedMps);
+        Sense(RouteProgressForDriver(*Definition,Position,Vehicle->GetActorForwardVector(),CenterErrorM),SpeedMps,DesiredSpeedMps);
         SenseCountdown = SenseIntervalSeconds;
     }
     CurrentLaneOffsetCm = FMath::FInterpConstantTo(CurrentLaneOffsetCm, DesiredLaneOffsetCm, Dt, 180.);
-    const double LookaheadM = FMath::Clamp(6. + SpeedMps * .6, 8., 18.);
+    // A longer speed-scaled lookahead starts the turn before a junction instead
+    // of aiming at the corner only after the nose reaches it. Short lookahead
+    // on the large-radius regional route made the AI cut through the outside
+    // of 90-degree intersections at speed.
+    const double LookaheadM = FMath::Clamp(6. + SpeedMps * .65, 8., 22.);
     const FVector2D Aim = Definition->PointAtDistance(ProgressM + LookaheadM) +
         RouteRightAt(ProgressM + LookaheadM) * CurrentLaneOffsetCm;
     const FVector Local = Vehicle->GetActorTransform().InverseTransformVectorNoScale(

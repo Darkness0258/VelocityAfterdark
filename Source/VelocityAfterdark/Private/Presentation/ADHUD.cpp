@@ -65,7 +65,28 @@ void AADHUD::DrawHUD()
     {
         const auto* Cinematic=PC->GetCinematic();
         if (Cinematic->IsHudHidden()) return;
-        const FLinearColor White(.92f,.94f,.95f),Accent(.53f,.92f,.77f),Black(.015f,.023f,.031f,.90f);
+        const FLinearColor White(.92f,.94f,.95f),Accent(.53f,.92f,.77f),Muted(.52f,.60f,.64f),Black(.015f,.023f,.031f,.90f);
+        if (Cinematic->GetMode()==EADCinematicMode::Story)
+        {
+            Panel(0,0,1920,132,FLinearColor(0,0,0,.94f));
+            Panel(0,872,1920,208,FLinearColor(0,0,0,.96f));
+            Panel(78,78,54,3,Accent);
+            Label(TEXT("VELOCITY  /  AFTERDARK"),78,31,.68f,Muted);
+            Label(Cinematic->GetStoryTitle(),78,87,1.18f,White);
+            Label(Cinematic->GetStoryAttribution(),92,896,.73f,Accent);
+            TArray<FString> Words; Cinematic->GetStorySubtitle().ParseIntoArray(Words,TEXT(" "),true);
+            FString Line; TArray<FString> Lines;
+            for (const FString& Word:Words)
+            {
+                if (Line.Len()+Word.Len()>96) { Lines.Add(Line.TrimEnd()); Line.Reset(); }
+                Line+=Word+TEXT(" ");
+            }
+            if (!Line.IsEmpty()) Lines.Add(Line.TrimEnd());
+            const int32 LineCount=FMath::Min(2,Lines.Num());
+            for (int32 Index=0;Index<LineCount;++Index) Label(Lines[Index],92,936.f+Index*31.f,.9f,White);
+            Label(TEXT("ENTER / ESC  ·  SKIP SEQUENCE"),1510,1025,.62f,Muted);
+            return;
+        }
         Panel(52,52,1180,74,Black);
         Label(Cinematic->GetMessage(),76,71,1.0f,White);
         Panel(52,922,1810,100,Black);

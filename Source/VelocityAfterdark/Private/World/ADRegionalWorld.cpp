@@ -26,7 +26,7 @@ namespace
         return Size > 0 && Size <= 131072 && FFileHelper::LoadFileToString(Json,*Path)
             && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json),Out) && Out.IsValid();
     }
-    bool ReadNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, double Min, double Max, double& Out)
+    bool ReadRegionalNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, double Min, double Max, double& Out)
     {
         const TSharedPtr<FJsonValue> Value = Object->TryGetField(Name);
         return Value && Value->Type == EJson::Number && Value->TryGetNumber(Out)
@@ -99,27 +99,27 @@ bool AADRegionalWorld::LoadDefinition()
         return Fail(TEXT("Cannot read regions.json and dockside.json objects (128 KB maximum each)."));
     double Value = 0.;
     FVector2D LegacyBounds;
-    if (!ReadNumber(Object,TEXT("schemaVersion"),1,1,Value)
+    if (!ReadRegionalNumber(Object,TEXT("schemaVersion"),1,1,Value)
         || !ReadPoint(Object,TEXT("groundHalfExtent"),GroundHalfExtent)
         || GroundHalfExtent.X < 50000 || GroundHalfExtent.Y < 40000 || GroundHalfExtent.X > 250000 || GroundHalfExtent.Y > 250000
         || !ReadPoint(Legacy,TEXT("groundHalfExtent"),LegacyBounds)
         || LegacyBounds.X < GroundHalfExtent.X || LegacyBounds.Y < GroundHalfExtent.Y)
         return Fail(TEXT("Regional bounds must fit inside the resident district ground and boundary fence."));
-    if (!ReadNumber(Object,TEXT("roadWidth"),1200,4000,Value)) return Fail(TEXT("Invalid regional road width."));
+    if (!ReadRegionalNumber(Object,TEXT("roadWidth"),1200,4000,Value)) return Fail(TEXT("Invalid regional road width."));
     RoadWidth = static_cast<float>(Value);
-    if (!ReadNumber(Legacy,TEXT("roadWidth"),1200,4000,Value)) return Fail(TEXT("Invalid existing road width."));
+    if (!ReadRegionalNumber(Legacy,TEXT("roadWidth"),1200,4000,Value)) return Fail(TEXT("Invalid existing road width."));
     LegacyRoadWidth = static_cast<float>(Value);
-    if (!ReadNumber(Object,TEXT("cellSizeCm"),8000,30000,Value)) return Fail(TEXT("Invalid cell size."));
+    if (!ReadRegionalNumber(Object,TEXT("cellSizeCm"),8000,30000,Value)) return Fail(TEXT("Invalid cell size."));
     CellSizeCm = static_cast<float>(Value);
-    if (!ReadNumber(Object,TEXT("loadRadiusCm"),16000,60000,Value)) return Fail(TEXT("Invalid scenery load radius."));
+    if (!ReadRegionalNumber(Object,TEXT("loadRadiusCm"),16000,60000,Value)) return Fail(TEXT("Invalid scenery load radius."));
     LoadRadiusCm = static_cast<float>(Value);
-    if (!ReadNumber(Object,TEXT("unloadRadiusCm"),LoadRadiusCm+4000.,90000,Value)) return Fail(TEXT("Unloading requires at least 40 m of hysteresis."));
+    if (!ReadRegionalNumber(Object,TEXT("unloadRadiusCm"),LoadRadiusCm+4000.,90000,Value)) return Fail(TEXT("Unloading requires at least 40 m of hysteresis."));
     UnloadRadiusCm = static_cast<float>(Value);
-    if (!ReadNumber(Object,TEXT("maximumLoadedCells"),4,48,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid maximum cell count."));
+    if (!ReadRegionalNumber(Object,TEXT("maximumLoadedCells"),4,48,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid maximum cell count."));
     MaximumLoadedCells = static_cast<int32>(Value);
-    if (!ReadNumber(Object,TEXT("cellOperationsPerUpdate"),1,4,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid cell operation budget."));
+    if (!ReadRegionalNumber(Object,TEXT("cellOperationsPerUpdate"),1,4,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid cell operation budget."));
     CellOperationsPerUpdate = static_cast<int32>(Value);
-    if (!ReadNumber(Object,TEXT("updateBudgetMs"),.25,8,Value)) return Fail(TEXT("Invalid streaming time budget."));
+    if (!ReadRegionalNumber(Object,TEXT("updateBudgetMs"),.25,8,Value)) return Fail(TEXT("Invalid streaming time budget."));
     UpdateBudgetMs = static_cast<float>(Value);
 
     TSet<FString> RoadIds;
@@ -190,9 +190,9 @@ bool AADRegionalWorld::LoadDefinition()
         if (StrictlyOverlaps(Bounds,DocksideBlocks)) return Fail(TEXT("New scenery may not overlap Dockside's existing blocks."));
         for (const FRegion& Other : Regions)
             if (StrictlyOverlaps(Bounds,FBox2D(Other.Min,Other.Max))) return Fail(TEXT("Region scenery bounds may not overlap."));
-        if (!ReadNumber(Data,TEXT("seed"),0,2147483647,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid region seed."));
+        if (!ReadRegionalNumber(Data,TEXT("seed"),0,2147483647,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid region seed."));
         Region.Seed = static_cast<int32>(Value);
-        if (!ReadNumber(Data,TEXT("propsPerCell"),1,16,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid cell prop count."));
+        if (!ReadRegionalNumber(Data,TEXT("propsPerCell"),1,16,Value) || Value != FMath::FloorToDouble(Value)) return Fail(TEXT("Invalid cell prop count."));
         Region.PropsPerCell = static_cast<int32>(Value);
         RegionIds.Add(Region.Id);
         Regions.Add(Region);
@@ -225,6 +225,52 @@ bool AADRegionalWorld::LoadMaterials()
     Cylinder = LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
     Sphere = LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
     if (!Cube || !Cylinder || !Sphere) { LoadError = TEXT("Regional scenery requires cooked engine primitive meshes."); return false; }
+
+    const auto LoadKitFamily = [this](const TCHAR* Directory, const TArray<FString>& Names,
+        TArray<TObjectPtr<UStaticMesh>>& Destination)
+    {
+        for (const FString& Name : Names)
+        {
+            const FString Path = FString::Printf(TEXT("%s/%s.%s"),Directory,*Name,*Name);
+            UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr,*Path);
+            if (!Mesh)
+            {
+                LoadError = FString::Printf(TEXT("Required streamed district mesh is missing: %s"),*Path);
+                return false;
+            }
+            Destination.Add(Mesh);
+        }
+        return !Destination.IsEmpty();
+    };
+    const auto LoadKitMesh = [this](const TCHAR* Directory, const TCHAR* Name) -> UStaticMesh*
+    {
+        const FString Path = FString::Printf(TEXT("%s/%s.%s"),Directory,Name,Name);
+        UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr,*Path);
+        if (!Mesh) LoadError = FString::Printf(TEXT("Required streamed district mesh is missing: %s"),*Path);
+        return Mesh;
+    };
+    if (!LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitCommercial"),
+            {TEXT("SM_Kenney_Commercial_SkyscraperA"),TEXT("SM_Kenney_Commercial_SkyscraperB"),
+             TEXT("SM_Kenney_Commercial_SkyscraperC"),TEXT("SM_Kenney_Commercial_SkyscraperD"),
+             TEXT("SM_Kenney_Commercial_SkyscraperE")},CommercialSkyscrapers)
+        || !LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitCommercial"),
+            {TEXT("SM_Kenney_Commercial_BuildingA"),TEXT("SM_Kenney_Commercial_BuildingD"),
+             TEXT("SM_Kenney_Commercial_BuildingH"),TEXT("SM_Kenney_Commercial_BuildingN")},CommercialMidRises)
+        || !LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitIndustrial"),
+            {TEXT("SM_Kenney_Industrial_BuildingA"),TEXT("SM_Kenney_Industrial_BuildingD"),
+             TEXT("SM_Kenney_Industrial_BuildingH"),TEXT("SM_Kenney_Industrial_BuildingM"),
+             TEXT("SM_Kenney_Industrial_BuildingQ"),TEXT("SM_Kenney_Industrial_BuildingT")},IndustrialWarehouses)
+        || !LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitIndustrial"),
+            {TEXT("SM_Kenney_Industrial_ContainerA"),TEXT("SM_Kenney_Industrial_ContainerC")},IndustrialContainers)
+        || !LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitIndustrial"),
+            {TEXT("SM_Kenney_Industrial_ChimneyLarge"),TEXT("SM_Kenney_Industrial_TankLarge"),
+             TEXT("SM_Kenney_Industrial_WaterTower")},IndustrialDetails)
+        || !LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitRoads"),
+            {TEXT("SM_Kenney_Roads_LampCurved"),TEXT("SM_Kenney_Roads_LampSquare")},RoadLamps))
+        return false;
+    TrafficSignal = LoadKitMesh(TEXT("/Game/Velocity/External/KenneyCityKitRoads"),TEXT("SM_Kenney_Roads_TrafficLight"));
+    ConstructionBarrier = LoadKitMesh(TEXT("/Game/Velocity/External/KenneyCityKitRoads"),TEXT("SM_Kenney_Roads_ConstructionBarrier"));
+    if (!TrafficSignal || !ConstructionBarrier) return false;
     WetAsphalt = MakeMaterial(TEXT("Asphalt"),TEXT("M_Asphalt"),FLinearColor(.022f,.028f,.034f),.27f,.08f);
     auto* White = MakeMaterial(TEXT("White"),TEXT("M_RoadMarking"),FLinearColor(.62f,.65f,.61f),.48f,0.f);
     auto* Yellow = MakeMaterial(TEXT("Yellow"),TEXT("M_RoadYellow"),FLinearColor(.73f,.46f,.08f),.52f,0.f);
@@ -250,7 +296,7 @@ UInstancedStaticMeshComponent* AADRegionalWorld::CreateBatch(FName Name, UMateri
     Batch->SetupAttachment(RootComponent);
     Batch->SetMobility(EComponentMobility::Static);
     Batch->SetStaticMesh(Mesh);
-    Batch->SetMaterial(0,Material);
+    if (Material) Batch->SetMaterial(0,Material);
     Batch->SetCanEverAffectNavigation(false);
     Batch->SetCollisionEnabled(bCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
     if (bCollision) Batch->SetCollisionProfileName(TEXT("BlockAll"));
@@ -264,6 +310,20 @@ void AADRegionalWorld::AddResident(FName Material, FVector Position, FVector Siz
     TObjectPtr<UInstancedStaticMeshComponent>& Batch = ResidentBatches.FindOrAdd(Material);
     if (!Batch) Batch = CreateBatch(FName(*(TEXT("Resident")+Material.ToString())),Materials.FindChecked(Material),Cube,Material == TEXT("Asphalt"));
     Batch->AddInstance(FTransform(Rotation,Position,Size/100.f));
+}
+
+void AADRegionalWorld::AddResidentMesh(FName BatchKey, UStaticMesh* Mesh, FVector Position,
+    FVector Size, FRotator Rotation)
+{
+    if (!Mesh || Size.ContainsNaN() || Size.GetMin() <= 0.f) return;
+    TObjectPtr<UInstancedStaticMeshComponent>& Batch = ResidentBatches.FindOrAdd(BatchKey);
+    if (!Batch) Batch = CreateBatch(FName(*(TEXT("ResidentMesh_")+BatchKey.ToString())),nullptr,Mesh,false);
+    const FBoxSphereBounds Bounds = Mesh->GetBounds();
+    const FVector MeshSize = Bounds.BoxExtent*2.f;
+    if (MeshSize.ContainsNaN() || MeshSize.GetMin() <= KINDA_SMALL_NUMBER) return;
+    const FVector Scale = Size/MeshSize;
+    const FVector Origin = Position-Rotation.RotateVector(Bounds.Origin*Scale);
+    Batch->AddInstance(FTransform(Rotation,Origin,Scale));
 }
 
 bool AADRegionalWorld::IsOnRegionalRoad(FVector2D Position, double MarginCm) const
@@ -303,7 +363,8 @@ void AADRegionalWorld::BuildResidentRoads()
         const FVector2D Delta = Road.End-Road.Start;
         const FVector2D Direction = Delta.GetSafeNormal();
         const FVector2D Side(-Direction.Y,Direction.X);
-        const FRotator Rotation(0,FMath::RadiansToDegrees(FMath::Atan2(Direction.Y,Direction.X)),0);
+        const float Heading = FMath::RadiansToDegrees(FMath::Atan2(Direction.Y,Direction.X));
+        const FRotator Rotation(0,Heading,0);
         for (double Distance = 500.; Distance < Delta.Size(); Distance += 1000.)
         {
             const FVector2D P = Road.Start+Direction*Distance;
@@ -319,6 +380,52 @@ void AADRegionalWorld::BuildResidentRoads()
                 AddResident(TEXT("White"),FVector(P+Side*(Sign*RoadWidth*.25),1),FVector(300,12,1),Rotation);
                 AddResident(TEXT("White"),FVector(P+Side*(Sign*(RoadWidth*.5-35)),1),FVector(1000,10,1),Rotation);
             }
+        }
+
+        // Modular kit lights are instanced by mesh, kept outside the driveable
+        // asphalt and omitted at junction approaches to protect sightlines.
+        for (double Distance = 3000.; Distance < Delta.Size()-2000.; Distance += 5000.)
+        {
+            const FVector2D P = Road.Start+Direction*Distance;
+            bool bNearJunction = false;
+            for (const auto& Other : Roads)
+                if (Other.Id != Road.Id && PointInside(P,RoadBox(Other,RoadWidth*.5+2200.))) { bNearJunction=true; break; }
+            for (const auto& Other : LegacyRoads)
+                if (PointInside(P,RoadBox(Other,LegacyRoadWidth*.5+2200.))) { bNearJunction=true; break; }
+            if (bNearJunction) continue;
+            for (int32 SideIndex = 0; SideIndex < 2; ++SideIndex)
+            {
+                const float Sign = SideIndex == 0 ? -1.f : 1.f;
+                UStaticMesh* Lamp = RoadLamps[(FMath::FloorToInt(Distance/5000.)+SideIndex)%RoadLamps.Num()].Get();
+                const float LampHeading = Heading+(Sign > 0.f ? 180.f : 0.f);
+                AddResidentMesh(Lamp->GetFName(),Lamp,FVector(P+Side*(Sign*(RoadWidth*.5+550.f)),410.f),
+                    FVector(70.f,220.f,820.f),FRotator(0,LampHeading,0));
+            }
+        }
+
+        // A static signal prop at each perpendicular approach makes the
+        // generated network legible without adding costly independent lights.
+        for (const bool bAtEnd : {false,true})
+        {
+            const FVector2D Endpoint = bAtEnd ? Road.End : Road.Start;
+            const FVector2D Approach = bAtEnd ? Direction : -Direction;
+            const FVector2D Right(Approach.Y,-Approach.X);
+            bool bConnectedCrossStreet = false;
+            const auto IsCrossStreet = [&Road,Endpoint,Direction](const FADRegionalRoad& Other,double OtherWidth)
+            {
+                return Other.Id != Road.Id
+                    && FMath::Abs(FVector2D::DotProduct(Direction,(Other.End-Other.Start).GetSafeNormal())) < .5
+                    && PointInside(Endpoint,RoadBox(Other,OtherWidth*.5+100.));
+            };
+            for (const auto& Other : Roads)
+                if (IsCrossStreet(Other,RoadWidth)) { bConnectedCrossStreet=true; break; }
+            for (const auto& Other : LegacyRoads)
+                if (IsCrossStreet(Other,LegacyRoadWidth)) { bConnectedCrossStreet=true; break; }
+            if (!bConnectedCrossStreet) continue;
+            const FVector2D SignalPoint = Endpoint+Right*(RoadWidth*.5+220.)-Approach*450.;
+            const float SignalHeading = FMath::RadiansToDegrees(FMath::Atan2(Approach.Y,Approach.X));
+            AddResidentMesh(TrafficSignal->GetFName(),TrafficSignal,FVector(SignalPoint,260.f),
+                FVector(70.f,70.f,520.f),FRotator(0,SignalHeading,0));
         }
     }
 }
@@ -355,9 +462,14 @@ void AADRegionalWorld::LoadCell(int32 Index)
     const FRegion& Region = Regions[Cell.Region];
     FRandomStream Random(Cell.Seed);
     TMap<FName,UInstancedStaticMeshComponent*> Batches;
-    const auto Piece = [this,&Cell,&Batches,Index](FName Material, FVector Position, FVector Size, int32 Shape = 0, FRotator Rotation = FRotator::ZeroRotator)
+    const auto Piece = [this,&Cell,&Batches,Index](FName Material, FVector Position, FVector Size,
+        int32 Shape = 0, FRotator Rotation = FRotator::ZeroRotator, UStaticMesh* MeshOverride = nullptr)
     {
-        const FName Key(*FString::Printf(TEXT("%s_%d"),*Material.ToString(),Shape));
+        UStaticMesh* Mesh = MeshOverride ? MeshOverride : Shape == 1 ? Cylinder.Get() : Shape == 2 ? Sphere.Get() : Cube.Get();
+        if (!Mesh || Size.ContainsNaN() || Size.GetMin() <= 0.f) return;
+        const FName Key = MeshOverride
+            ? FName(*FString::Printf(TEXT("%s_%s"),*Material.ToString(),*Mesh->GetName()))
+            : FName(*FString::Printf(TEXT("%s_%d"),*Material.ToString(),Shape));
         UInstancedStaticMeshComponent*& Batch = Batches.FindOrAdd(Key);
         if (!Batch)
         {
@@ -365,11 +477,17 @@ void AADRegionalWorld::LoadCell(int32 Index)
             // UObject lifecycle; use a unique object name for later reloads.
             const FName Name = MakeUniqueObjectName(this,UInstancedStaticMeshComponent::StaticClass(),
                 FName(*FString::Printf(TEXT("Cell_%d_%s"),Index,*Key.ToString())));
-            Batch = CreateBatch(Name,Materials.FindChecked(Material),Shape == 1 ? Cylinder.Get() : Shape == 2 ? Sphere.Get() : Cube.Get(),false);
+            UMaterialInterface* OverrideMaterial = Materials.FindRef(Material);
+            Batch = CreateBatch(Name,OverrideMaterial,Mesh,false);
             ActiveComponents.Add(Batch);
             Cell.Components.Add(Batch);
         }
-        Batch->AddInstance(FTransform(Rotation,Position,Size/100.f));
+        const FBoxSphereBounds Bounds = Mesh->GetBounds();
+        const FVector MeshSize = Bounds.BoxExtent*2.f;
+        if (MeshSize.ContainsNaN() || MeshSize.GetMin() <= KINDA_SMALL_NUMBER) return;
+        const FVector Scale = Size/MeshSize;
+        const FVector Origin = Position-Rotation.RotateVector(Bounds.Origin*Scale);
+        Batch->AddInstance(FTransform(Rotation,Origin,Scale));
     };
     TArray<FBox2D> Footprints;
     int32 Placed = 0;
@@ -411,29 +529,51 @@ void AADRegionalWorld::LoadCell(int32 Index)
         }
         else if (Region.Style == TEXT("industrial"))
         {
-            Piece(TEXT("Rust"),FVector(P,850),FVector(Radius*1.7,Radius*1.6,1700));
-            Piece(TEXT("Metal"),FVector(P,1730),FVector(Radius*1.86,Radius*1.75,60));
-            for (int32 Door = -1; Door <= 1; ++Door)
-                Piece(TEXT("Metal"),FVector(P+FVector2D(Door*Radius*.5,Radius*.8+3),350),FVector(Radius*.34,8,700));
-            Piece(TEXT("Metal"),FVector(P+FVector2D(Radius*.55,0),2100),FVector(160,160,760),1);
+            const float Height = Random.FRandRange(1500.f,2600.f);
+            UStaticMesh* Warehouse = IndustrialWarehouses[Random.RandRange(0,IndustrialWarehouses.Num()-1)].Get();
+            Piece(TEXT("KenneyIndustrial"),FVector(P,Height*.5f),FVector(Radius*1.25f,Radius*1.18f,Height),
+                0,FRotator(0,Random.FRandRange(-180.f,180.f),0),Warehouse);
+
+            // Yard dressing reuses imported kit meshes and stays inside the
+            // cell footprint so it cannot spill onto a neighboring road.
+            if (Random.FRand()<.52f)
+            {
+                if (Random.FRand()<.58f)
+                {
+                    UStaticMesh* Container=IndustrialContainers[Random.RandRange(0,IndustrialContainers.Num()-1)].Get();
+                    const FVector2D Offset(Radius*.84f,Radius*Random.FRandRange(-.12f,.12f));
+                    Piece(TEXT("KenneyIndustrial"),FVector(P+Offset,Radius*.14f),
+                        FVector(Radius*.26f,Radius*.68f,Radius*.28f),0,
+                        FRotator(0,Random.RandRange(0,3)*90.f,0),Container);
+                }
+                else
+                {
+                    const int32 DetailIndex=Random.RandRange(0,IndustrialDetails.Num()-1);
+                    UStaticMesh* Detail=IndustrialDetails[DetailIndex].Get();
+                    const float Width=Radius*(DetailIndex==1 ? .48f : .32f);
+                    const float DetailHeight=Radius*(DetailIndex==0 ? .92f : DetailIndex==1 ? .42f : 1.12f);
+                    const FVector2D Offset(-Radius*.82f,Radius*Random.FRandRange(-.14f,.14f));
+                    Piece(TEXT("KenneyIndustrial"),FVector(P+Offset,DetailHeight*.5f),
+                        FVector(Width,Width,DetailHeight),0,FRotator::ZeroRotator,Detail);
+                }
+            }
         }
         else if (Region.Style == TEXT("downtown"))
         {
-            const float Height = Random.FRandRange(5000,11000);
-            Piece(TEXT("Glass"),FVector(P,Height*.5),FVector(Radius*1.6,Radius*1.6,Height));
-            Piece(TEXT("Metal"),FVector(P,Height+40),FVector(Radius*1.72,Radius*1.72,80));
-            for (int32 Floor = 1; Floor < 5; ++Floor)
-                Piece(TEXT("Windows"),FVector(P,Height*Floor/5.f),FVector(Radius*1.63,Radius*1.63,35));
-            Piece(TEXT("Metal"),FVector(P,Height+450),FVector(20,20,820),1);
+            const bool bSkyscraper=Random.FRand()<.72f;
+            const float Height=bSkyscraper ? Random.FRandRange(6500.f,11500.f) : Random.FRandRange(2600.f,4800.f);
+            UStaticMesh* Building=bSkyscraper
+                ? CommercialSkyscrapers[Random.RandRange(0,CommercialSkyscrapers.Num()-1)].Get()
+                : CommercialMidRises[Random.RandRange(0,CommercialMidRises.Num()-1)].Get();
+            Piece(TEXT("KenneyCommercial"),FVector(P,Height*.5f),FVector(Radius*1.72f,Radius*1.54f,Height),
+                0,FRotator(0,Random.FRandRange(-180.f,180.f),0),Building);
         }
         else if (Region.Style == TEXT("coast"))
         {
-            const float Height = Random.FRandRange(1400,3500);
-            Piece(TEXT("Concrete"),FVector(P,Height*.5),FVector(Radius*1.72,Radius*1.45,Height));
-            for (int32 Floor = 1; Floor <= 3; ++Floor)
-                Piece(TEXT("Glass"),FVector(P+FVector2D(0,Radius*.73),Height*Floor/4.f),FVector(Radius*1.56,12,Height*.12));
-            Piece(TEXT("Concrete"),FVector(P,Height+45),FVector(Radius*1.91,Radius*1.7,90));
-            Piece(TEXT("Windows"),FVector(P+FVector2D(0,Radius*.76),280),FVector(Radius*.5,12,220));
+            const float Height=Random.FRandRange(1800.f,3800.f);
+            UStaticMesh* Hotel=CommercialMidRises[Random.RandRange(0,CommercialMidRises.Num()-1)].Get();
+            Piece(TEXT("KenneyCommercial"),FVector(P,Height*.5f),FVector(Radius*1.72f,Radius*1.45f,Height),
+                0,FRotator(0,Random.FRandRange(-180.f,180.f),0),Hotel);
         }
         else // Motorsport paddock: open stands and pit structures.
         {
@@ -444,6 +584,8 @@ void AADRegionalWorld::LoadCell(int32 Index)
                 Piece(TEXT("Concrete"),FVector(P+FVector2D(0,-Radius*.55+Step*Radius*.42),80.f+Step*135.f),
                     FVector(Radius*1.55,Radius*.38,150));
             Piece(TEXT("Rust"),FVector(P+FVector2D(0,Radius*.68),470),FVector(Radius*1.58,20,70));
+            Piece(TEXT("KitBarrier"),FVector(P+FVector2D(Radius*.35f,-Radius*.8f),55.f),
+                FVector(90.f,Radius*.72f,110.f),0,FRotator::ZeroRotator,ConstructionBarrier);
         }
     }
     Cell.bLoaded = true;
@@ -466,6 +608,16 @@ void AADRegionalWorld::UnloadCell(int32 Index)
     Cell.Components.Reset();
     Cell.bLoaded = false;
     --LoadedCellCount;
+}
+
+int32 AADRegionalWorld::GetLoadedKenneyInstanceCount() const
+{
+    int32 Count=0;
+    for (const UInstancedStaticMeshComponent* Component : ActiveComponents)
+        if (IsValid(Component) && IsValid(Component->GetStaticMesh())
+            && Component->GetStaticMesh()->GetName().StartsWith(TEXT("SM_Kenney_")))
+            Count+=Component->GetInstanceCount();
+    return Count;
 }
 
 void AADRegionalWorld::BindVehicle(AADVehiclePawn* Car)

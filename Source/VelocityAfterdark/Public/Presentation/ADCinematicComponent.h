@@ -6,7 +6,7 @@ class ACameraActor;
 class AADVehiclePawn;
 class UPrimitiveComponent;
 UENUM()
-enum class EADCinematicMode : uint8 { None, Photo, Replay };
+enum class EADCinematicMode : uint8 { None, Photo, Replay, Story };
 struct FADReplaySample
 {
     double Seconds=0.;
@@ -26,6 +26,8 @@ public:
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     bool EnterPhoto();
     bool EnterReplay();
+    bool PlayArrivalCutscene();
+    bool PlayCareerBriefing(const FString& ChapterTitle,const FString& CrewLine,const FString& Narrative);
     void Leave();
     void Capture();
     void ToggleHidden() { bHidden=!bHidden; }
@@ -34,6 +36,10 @@ public:
     bool IsActive() const { return Mode!=EADCinematicMode::None; }
     bool IsHudHidden() const { return bHidden || CaptureHideFrames>0; }
     EADCinematicMode GetMode() const { return Mode; }
+    const FString& GetStoryTitle() const { return StoryTitle; }
+    const FString& GetStoryAttribution() const { return StoryAttribution; }
+    const FString& GetStorySubtitle() const;
+    float GetStorySeconds() const { return StorySeconds; }
     double GetReplaySeconds() const { return ReplaySeconds; }
     double GetReplayDuration() const;
     // Call before an explicit reset, race-grid placement or other teleport.
@@ -46,6 +52,9 @@ private:
     void UpdatePhoto(float RealDelta);
     void ApplyPhotoLook();
     void UpdateReplay(float RealDelta);
+    void UpdateStory(float RealDelta);
+    bool StartStory(const FString& Title,const FString& Attribution,const FString& Narrative,
+        const FString& Closing,bool bContinueToCareerRace);
     void Record(float DeltaSeconds);
     bool BuildPlayback();
     UPROPERTY(Transient) TObjectPtr<ACameraActor> Camera;
@@ -73,8 +82,12 @@ private:
     bool bWasPhysicsTicking=false;
     bool bPlaying=true;
     bool bHidden=false;
+    bool bContinueToCareerRace=false;
     EADCinematicMode Mode=EADCinematicMode::None;
     FString Message;
+    FString StoryTitle,StoryAttribution,StoryNarrative,StoryClosing;
+    float StorySeconds=0.f;
+    static constexpr float StoryDurationSeconds=9.5f;
     static constexpr int32 SampleCapacity=1200;
     static constexpr double MaximumReplaySeconds=60.;
     static constexpr double MaximumSampleGapSeconds=.25;

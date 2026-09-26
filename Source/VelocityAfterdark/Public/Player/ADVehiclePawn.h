@@ -17,6 +17,7 @@ class UPointLightComponent;
 class USpotLightComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
+class AADAtmosphere;
 
 UENUM()
 enum class EADCameraMode : uint8 { Chase, Hood, Cockpit };
@@ -91,9 +92,11 @@ private:
     UPROPERTY(Transient) TArray<TObjectPtr<USceneComponent>> WheelPivots;
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> BrakeLenses;
     UPROPERTY(Transient) TArray<TObjectPtr<UPointLightComponent>> BrakeLights;
+    UPROPERTY(Transient) TArray<TObjectPtr<USceneComponent>> WiperPivots;
     UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> FallbackMaterials;
     UPROPERTY(Transient) TObjectPtr<USceneComponent> SteeringWheel;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> RacePaint;
+    TWeakObjectPtr<AADAtmosphere> Atmosphere;
     FTransform RecoveryTransform;
     EADCameraMode CameraMode = EADCameraMode::Chase;
     bool bDrivingEnabled = false;
@@ -112,5 +115,6 @@ private:
     bool bNetworkProbeEnabled=false;
     bool bNetworkProbeMovementReported=false;
     float ShowcaseTime = 0.0f;
+    float WiperPhase = 0.f;
     FString PresentedBodyStyle;
 };
