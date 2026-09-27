@@ -119,7 +119,7 @@ switch ($Action) {
         $expectedTests = @('Afterdark.Data.VehicleDefinition', 'Afterdark.Data.RaceDefinition', 'Afterdark.Runtime.InputAndCamera')
         foreach ($rate in @(30, 60, 120)) {
             $expectedTests += "Afterdark.Runtime.DriveAndBrake.${rate}Hz"
-            foreach ($scenario in @('HighSpeed', 'Steering', 'Barrier', 'Curb')) {
+            foreach ($scenario in @('HighSpeed', 'Steering', 'Barrier', 'Curb', 'Wheelspin', 'TractionControl')) {
                 $expectedTests += "Afterdark.Runtime.Handling.$scenario.${rate}Hz"
             }
         }
@@ -128,6 +128,7 @@ switch ($Action) {
             'Afterdark.Ownership.Transactions', 'Afterdark.Ownership.CorruptionRecovery', 'Afterdark.Ownership.MigrationAndRollback')
         $expectedTests += @('Afterdark.Data.RoadNetwork', 'Afterdark.Ownership.WorldProgress')
         $expectedTests += @('Afterdark.Data.RaceCatalog', 'Afterdark.Career.RouteProgression',
+            'Afterdark.Map.ZoomPanProjection', 'Afterdark.Ownership.MapWaypointPersistence',
             'Afterdark.Ownership.VehicleCollection', 'Afterdark.Ownership.VehicleMigrationAndRollback',
             'Afterdark.Runtime.GarageVehicleSwitch', 'Afterdark.Input.Rebinding',
             'Afterdark.Settings.DraftApplyCancel', 'Afterdark.Settings.CanvasScale',
@@ -177,13 +178,19 @@ switch ($Action) {
             }
             Copy-Item -LiteralPath $capture -Destination $renderOutput -Force
         }
-            Copy-Item -LiteralPath $capture -Destination $renderOutput -Force
+        $garageCapture = Join-Path $projectRoot 'Saved\Smoke\AfterdarkGarage.png'
+        if (-not (Test-Path -LiteralPath $garageCapture) -or (Get-Item -LiteralPath $garageCapture).LastWriteTime -lt $renderStarted) {
+            throw "A fresh garage lighting capture was not produced. Inspect $renderLog"
         }
-        $renderLog = Join-Path $artifactRoot 'render-smoke.log'
+        Copy-Item -LiteralPath $garageCapture -Destination $renderOutput -Force
         if (-not (Select-String -LiteralPath $renderLog -SimpleMatch 'AFTERDARK_CUTSCENE_SMOKE_COMPLETE' -Quiet)) {
             throw 'The packaged-style arrival cutscene did not complete with a live, driveable vehicle.'
         }
-        Write-Host "AFTERDARK_RENDER_CAPTURE_OK: four driving views and four moving cutscene shots in $renderOutput."
+        if (-not (Select-String -LiteralPath $renderLog -SimpleMatch 'AFTERDARK_GARAGE_SMOKE_COMPLETE' -Quiet)) {
+            throw 'The garage rendering smoke did not complete with its new PBR surfaces and exposure.'
+        }
+        Write-Host "AFTERDARK_RENDER_CAPTURE_OK: four driving views, garage studio and four moving cutscene shots in $renderOutput."
+    }
     'Package' {
         $mapFile = Join-Path $projectRoot 'Content\Velocity\Maps\L_Dockside.umap'
         if (-not (Test-Path -LiteralPath $mapFile)) { throw 'Run -Action Bootstrap before packaging.' }

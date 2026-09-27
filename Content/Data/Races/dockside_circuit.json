@@ -6,6 +6,7 @@
   "countdownSeconds": 3,
   "timeoutSeconds": 480,
   "recoveryPenaltySeconds": 5,
+  "parSeconds": 369,
   "routePoints": [
     [
       0,
@@ -288,7 +289,7 @@
   ],
   "opponents": [
     {
-      "name": "Rhea Vale",
+      "name": "Dax Kerr",
       "color": [
         0.92,
         0.19,
@@ -296,7 +297,7 @@
       ],
       "speedScale": 1.0,
       "laneOffsetCm": 300,
-      "id": "rhea_vale",
+      "id": "dax_kerr",
       "personality": {
         "overtakeAggression": 0.86,
         "brakingConservatism": 0.62,

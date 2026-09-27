@@ -6,6 +6,7 @@
   "countdownSeconds": 3,
   "timeoutSeconds": 300,
   "recoveryPenaltySeconds": 5,
+  "parSeconds": 187,
   "difficultySpeedScales": [
     0.8,
     0.95,
@@ -394,7 +395,7 @@
       }
     },
     {
-      "name": "Nico Bram",
+      "name": "Ivo Renn",
       "color": [
         0.12,
         0.68,
@@ -402,7 +403,7 @@
       ],
       "speedScale": 0.97,
       "laneOffsetCm": -300,
-      "id": "nico_bram",
+      "id": "ivo_renn",
       "personality": {
         "overtakeAggression": 0.92,
         "brakingConservatism": 0.26,

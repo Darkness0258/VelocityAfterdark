@@ -16,6 +16,9 @@
 #include "Algo/BinarySearch.h"
 #include "EngineUtils.h"
 #include "World/ADAtmosphere.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Misc/FileHelper.h"
 
 namespace
 {
@@ -80,7 +83,6 @@ bool UADCinematicComponent::StartStory(const FString& Title,const FString& Attri
 
 const FString& UADCinematicComponent::GetStorySubtitle() const
 {
-    if (StorySeconds<2.f) return StoryAttribution;
     if (StorySeconds<8.f) return StoryNarrative;
     return StoryClosing;
 }
@@ -145,9 +147,12 @@ bool UADCinematicComponent::Enter(EADCinematicMode Desired)
     PC->FlushPressedKeys(); PC->SetViewTarget(Camera);
     Mode=Desired; ReplaySeconds=0.; LastWallSeconds=FPlatformTime::Seconds();
     bPlaying=true; bHidden=false;
+    CacheResultMetadata();
     Message=Desired==EADCinematicMode::Photo
         ? TEXT("PHOTO MODE / 1-4 LOOK / R-F FOCUS / T-G APERTURE / [ ] EXPOSURE")
         : Desired==EADCinematicMode::Replay ? TEXT("DRIVE REPLAY / VEHICLE ONLY") : TEXT("STORY SEQUENCE");
+    if (!ResultRaceId.IsEmpty() && Desired!=EADCinematicMode::Story)
+        Message+=FString::Printf(TEXT("  /  %s  /  GRADE %s"),*ResultRaceName,*ResultGrade);
     return true;
 }
 
@@ -160,6 +165,26 @@ FTransform UADCinematicComponent::GetCinematicCameraTransform() const
 void UADCinematicComponent::NotifyRecordingDiscontinuity()
 {
     Ring.Reset(); RingHead=0; RecordAccumulator=0.f; RecordedVehicle.Reset();
+}
+
+void UADCinematicComponent::ClearResultMetadata()
+{
+    ResultRaceId.Reset(); ResultRaceName.Reset(); ResultGrade.Reset();
+    ResultPlace=ResultRecoveries=0; ResultSeconds=0.;
+}
+
+void UADCinematicComponent::CacheResultMetadata()
+{
+    const auto* PC=Cast<AADPlayerController>(GetOwner());
+    const AADRaceManager* Manager=PC ? PC->GetRaceManager() : nullptr;
+    if (!Manager || Manager->GetState()!=EADRaceState::Results || !Manager->GetRacers().IsValidIndex(0)) return;
+    const FADRacerState& Player=Manager->GetRacers()[0];
+    ResultRaceId=Manager->GetDefinition().Id;
+    ResultRaceName=Manager->GetDefinition().Name;
+    ResultGrade=ANSI_TO_TCHAR(ADRaceRules::GradeName(Player.Grade));
+    ResultPlace=Player.Place;
+    ResultRecoveries=Player.RecoveryCount;
+    ResultSeconds=Player.Progress.FinishSeconds+Player.PenaltySeconds;
 }
 
 bool UADCinematicComponent::BuildPlayback()
@@ -389,7 +414,25 @@ void UADCinematicComponent::Capture()
     CaptureHideFrames=3;
     const FString Path=Directory/(TEXT("Afterdark_")+FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S"))+TEXT("_")+FGuid::NewGuid().ToString(EGuidFormats::Digits)+TEXT(".png"));
     FScreenshotRequest::RequestScreenshot(Path,false,false);
-    Message=TEXT("Screenshot requested in Saved/Photos.");
+    if (!ResultRaceId.IsEmpty())
+    {
+        const auto Metadata=MakeShared<FJsonObject>();
+        Metadata->SetStringField(TEXT("raceId"),ResultRaceId);
+        Metadata->SetStringField(TEXT("raceName"),ResultRaceName);
+        Metadata->SetStringField(TEXT("grade"),ResultGrade);
+        Metadata->SetNumberField(TEXT("place"),ResultPlace);
+        Metadata->SetNumberField(TEXT("totalSeconds"),ResultSeconds);
+        Metadata->SetNumberField(TEXT("recoveries"),ResultRecoveries);
+        FString Text;
+        if (FJsonSerializer::Serialize(Metadata,TJsonWriterFactory<>::Create(&Text)))
+        {
+            const FString MetadataPath=FPaths::ChangeExtension(Path,TEXT("json"));
+            if (!FFileHelper::SaveStringToFile(Text,*MetadataPath))
+                UE_LOG(LogTemp,Warning,TEXT("Race photo metadata could not be saved: %s"),*MetadataPath);
+        }
+    }
+    Message=ResultRaceId.IsEmpty() ? TEXT("Screenshot requested in Saved/Photos.")
+        : TEXT("Screenshot and race-grade metadata requested in Saved/Photos.");
 }
 
 void UADCinematicComponent::Leave()

@@ -45,6 +45,7 @@ struct VELOCITYAFTERDARK_API FADRaceDefinition
     double CountdownSeconds = 3.0;
     double TimeoutSeconds = 480.0;
     double RecoveryPenaltySeconds = 5.0;
+    double ParSeconds = 240.0;
     double RouteLengthM = 0.0;
     TArray<FADRaceRoutePoint> RoutePoints;
     TArray<double> RouteDistancesM;

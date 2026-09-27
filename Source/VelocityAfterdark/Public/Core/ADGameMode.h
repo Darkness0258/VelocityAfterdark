@@ -37,6 +37,7 @@ public:
     AADTrafficManager* GetTrafficManager() const { return Traffic; }
     AADRegionalWorld* GetRegionalWorld() const { return RegionalWorld; }
     AADExplorationDirector* GetExploration() const { return Exploration; }
+    FVector GetDrivingStartLocation() const;
     // Idempotent startup is shared by normal play and integrated PIE acceptance.
     bool InitializeLivingWorld(FString& OutError);
     FVector2D GetDriveBounds() const;

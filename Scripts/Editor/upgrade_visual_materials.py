@@ -224,7 +224,7 @@ def main():
     make_surface_material("M_Rubber_PBR", (0.025, 0.028, 0.032), imported["T_Rubber_Surface_V3"],
                           imported["T_Rubber_Normal_V3"], (10.0, 4.0), 0.0)
     enable_parked_car_instancing()
-    unreal.log("AFTERDARK_VISUAL_MATERIALS_READY: six small PBR maps and three instanced district materials")
+    unreal.log("AFTERDARK_VISUAL_MATERIALS_READY: ten 1K PBR detail maps, five surface materials and eight instanced vehicle materials")
 
 
 if __name__ == "__main__":

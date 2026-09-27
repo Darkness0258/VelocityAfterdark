@@ -48,6 +48,7 @@ public:
     // Call before an explicit reset, race-grid placement or other teleport.
     // A motion/timestamp guard also protects callers that cannot notify us.
     void NotifyRecordingDiscontinuity();
+    void ClearResultMetadata();
     float GetPhotoExposureOffset() const { return PhotoExposureOffset; }
     const FString& GetMessage() const { return Message; }
 private:
@@ -60,6 +61,7 @@ private:
         const FString& Closing,bool bContinueToCareerRace);
     void Record(float DeltaSeconds);
     bool BuildPlayback();
+    void CacheResultMetadata();
     UPROPERTY(Transient) TObjectPtr<ACameraActor> Camera;
     TWeakObjectPtr<AADVehiclePawn> Vehicle;
     TWeakObjectPtr<UPrimitiveComponent> Chassis;
@@ -89,6 +91,9 @@ private:
     EADCinematicMode Mode=EADCinematicMode::None;
     FString Message;
     FString StoryTitle,StoryAttribution,StoryNarrative,StoryClosing;
+    FString ResultRaceId,ResultRaceName,ResultGrade;
+    int32 ResultPlace=0,ResultRecoveries=0;
+    double ResultSeconds=0.;
     float StorySeconds=0.f;
     static constexpr float StoryDurationSeconds=14.f;
     static constexpr int32 SampleCapacity=1200;

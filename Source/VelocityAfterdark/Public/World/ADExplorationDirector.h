@@ -31,10 +31,12 @@ public:
     double GetRouteDistanceCm() const { return RouteDistanceCm; }
     const FString& GetRouteError() const { return RouteError; }
     FString GetDirectionHint() const;
+    bool FastTravelToDiscovery(AADVehiclePawn* Car, const FString& LocationId, FString& OutError);
 
 private:
     void ResetArrival();
     void RefreshRoute(const FVector2D& Position);
+    void ResetAfterTeleport(AADVehiclePawn* Car);
     TWeakObjectPtr<UADOwnershipSubsystem> Ownership;
     TWeakObjectPtr<AADVehiclePawn> Player;
     FADRoadNetwork RoadNetwork;

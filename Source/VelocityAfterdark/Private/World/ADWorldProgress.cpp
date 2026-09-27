@@ -13,7 +13,9 @@ bool FADWorldSnapshot::IsValid() const
         && WeatherIndex >= 0 && WeatherIndex < 16 && Weather <= 2
         && FMath::IsFinite(Wetness) && Wetness >= 0.f && Wetness <= 1.f
         && FMath::IsFinite(RainAmount) && RainAmount >= 0.f && RainAmount <= 1.f
-        && FMath::IsFinite(FogAmount) && FogAmount >= 0.f && FogAmount <= 1.f;
+        && FMath::IsFinite(FogAmount) && FogAmount >= 0.f && FogAmount <= 1.f
+        && FMath::IsFinite(CustomWaypoint.X) && FMath::IsFinite(CustomWaypoint.Y)
+        && FMath::Abs(CustomWaypoint.X) <= 250000. && FMath::Abs(CustomWaypoint.Y) <= 250000.;
 }
 
 bool FADDiscoveryDefinition::LoadCatalog(const FString& Path, TArray<FADDiscoveryDefinition>& Out, FString& Error)

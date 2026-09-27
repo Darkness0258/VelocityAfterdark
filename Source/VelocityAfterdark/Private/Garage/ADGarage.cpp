@@ -24,7 +24,9 @@ AADGarage::AADGarage()
     Camera->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
     Camera->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure = false;
     Camera->PostProcessSettings.bOverride_AutoExposureBias = true;
-    Camera->PostProcessSettings.AutoExposureBias = 0.f;
+    // The studio is calibrated under neutral so pale concrete and
+    // metallic paint retain highlight detail in the editor and packaged game.
+    Camera->PostProcessSettings.AutoExposureBias = -1.3f;
     Camera->PostProcessSettings.bOverride_BloomIntensity = true;
     Camera->PostProcessSettings.BloomIntensity = .15f;
     Camera->PostProcessSettings.bOverride_VignetteIntensity = true;
@@ -102,8 +104,8 @@ bool AADGarage::BuildStage()
     Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
     Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
     if (!Cube || !Cylinder) return false;
-    auto* Floor = CreateSurface(TEXT("StudioFloor"), TEXT("M_Concrete_PBR"), FLinearColor(.105f,.12f,.13f), .36f, .12f);
-    auto* Wall = CreateSurface(TEXT("StudioWall"), TEXT("M_Concrete_PBR"), FLinearColor(.13f,.145f,.155f), .8f, 0.f);
+    auto* Floor = CreateSurface(TEXT("StudioFloor"), TEXT("M_Concrete_PBR_V3"), FLinearColor(.105f,.12f,.13f), .36f, .12f);
+    auto* Wall = CreateSurface(TEXT("StudioWall"), TEXT("M_Concrete_PBR_V3"), FLinearColor(.13f,.145f,.155f), .8f, 0.f);
     auto* Dark = CreateSurface(TEXT("StudioDark"), TEXT("M_IndustrialMetal_PBR"), FLinearColor(.022f,.031f,.04f), .47f, .55f);
     auto* Metal = CreateSurface(TEXT("StudioMetal"), TEXT("M_IndustrialMetal_PBR"), FLinearColor(.21f,.235f,.26f), .3f, .8f);
     auto* Cabinet = CreateSurface(TEXT("StudioCabinet"), TEXT("M_Paint"), FLinearColor(.027f,.12f,.14f), .32f, .45f);
@@ -296,9 +298,9 @@ void AADGarage::UpdateLightingExposure()
     // The garage is a controlled studio. Do not inherit the world EV and then
     // counter it with 2^-EV lamp scaling: the city uses a -10 EV daylight bias,
     // which previously drove these local lights above 1,000x their authored power.
-    Camera->PostProcessSettings.AutoExposureBias = 0.f;
+    Camera->PostProcessSettings.AutoExposureBias = -1.3f;
     for (const FStudioLight& Light : StudioLights)
-        if (Light.Component.IsValid()) Light.Component->SetIntensity(Light.BaseLumens);
+        if (Light.Component.IsValid()) Light.Component->SetIntensity(Light.BaseLumens * .5f);
 }
 
 void AADGarage::Tick(float DeltaSeconds)

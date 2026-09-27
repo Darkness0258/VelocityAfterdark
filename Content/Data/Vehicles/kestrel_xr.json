@@ -52,6 +52,7 @@
   "downshiftRpm": 2350,
   "shiftTimeSeconds": 0.25,
   "wheelRadiusM": 0.34,
+  "wheelInertiaKgM2": 0.95,
   "wheelAnchorsCm": [
     [
       135,

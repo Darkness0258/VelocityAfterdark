@@ -6,6 +6,7 @@
   "countdownSeconds": 3,
   "timeoutSeconds": 300,
   "recoveryPenaltySeconds": 5,
+  "parSeconds": 204,
   "difficultySpeedScales": [
     0.8,
     0.95,
@@ -383,7 +384,7 @@
   ],
   "opponents": [
     {
-      "name": "Soren Pell",
+      "name": "Reya Voss",
       "color": [
         0.92,
         0.19,
@@ -391,7 +392,7 @@
       ],
       "speedScale": 1.0,
       "laneOffsetCm": 300,
-      "id": "soren_pell",
+      "id": "reya_voss",
       "personality": {
         "overtakeAggression": 0.89,
         "brakingConservatism": 0.35,

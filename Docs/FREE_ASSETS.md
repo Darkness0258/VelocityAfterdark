@@ -1,6 +1,6 @@
 # Free asset sources
 
-Verified, currently-live sources to replace generated blockout content with real production assets. Follow the same discipline already used for `SM_CC0_CityCar`: record every import in `ASSET_PROVENANCE.md` before it reaches a package, using the template at the bottom of this file. Links and licenses below were checked live before this doc was written — re-verify the license on the actual download page before you import anything, since packs occasionally change terms.
+Candidate sources for replacing generated blockout content. Selected Kenney city kits and the Poly Haven asphalt texture are already imported and documented; the other packs below are suggestions, not project dependencies. Record every new import in the root or `Docs/ASSET_PROVENANCE.md` before it reaches a package, using the template at the bottom. Listing pages and stated licenses were rechecked on 2026-09-27 for the named packs below, but always verify the exact product/license/EULA shown when downloading.
 
 ## Where everything goes
 
@@ -10,18 +10,18 @@ Raw downloads (zips, source files, license text) land in `Content/ExternalAssets
 
 | Need (from `ASSETS_AND_PERFORMANCE.md`) | Source | License | What to grab | Notes |
 |---|---|---|---|---|
-| District trim kit — curbs, corners, junctions, signage, barriers | [Kenney City Kit (Roads)](https://kenney.nl/assets/city-kit-roads) | CC0 1.0 | Road segments, curbs, barriers, signs, traffic lights (2.1 added signage) | FBX/OBJ/glTF, documented as Unreal-compatible |
-| District identity variety — Iron Quay / Glass Coast / Downtown | Kenney's broader City Kit line (commercial, suburban, industrial variants) at [kenney.nl/assets](https://kenney.nl/assets) | CC0 1.0 | The variant matching each district | Same modular grid as Roads, so kits combine cleanly |
-| Track dressing — fences, barriers, billboards, pit props | [Kenney Racing Kit](https://opengameart.org/content/racing-kit) | CC0 | 70+ objects, FBX/OBJ/glTF | Explicitly documented as working in Unreal |
-| PBR materials — asphalt, concrete, facade, metal | [Poly Haven](https://polyhaven.com/textures) and [ambientCG](https://ambientcg.com) | CC0 | Diffuse/normal/roughness/AO/displacement sets | Can directly replace the six Python-generated textures from `VISUAL_PRESENTATION.md` — same PBR channel layout your bootstrap script already imports |
-| One-off high-fidelity environment kits | [Fab](https://www.fab.com) — filter License: Free, check "Limited Time Free" | Varies — some rotate free every 2 weeks, some are permanently free | Whatever currently fits Nova City's look — check what's live now rather than trusting an old pack name | Claim ("buy" for $0) while free and it's yours permanently, even after the window closes |
-| UI — buttons, panels, sliders, 2 fonts, 6 UI SFX | [Kenney UI Pack](https://opengameart.org/content/ui-pack) | CC0 | Full sprite set + fonts + sound in one download | Matches your "engine fonts and canvas HUD" gap directly |
-| Ambient/impact/environment SFX | [Freesound.org](https://freesound.org) | **Per-file — filter to CC0 only** | Rain, wind, impacts, crowd ambience | Freesound mixes CC0/CC-BY/CC-BY-SA on one site; check every file's own license tag, same as any other external source |
+| District trim kit — curbs, corners, junctions, signage, barriers | [Kenney City Kit (Roads)](https://kenney.nl/assets/city-kit-roads) | CC0 1.0 | Road segments, curbs, barriers, signs, traffic lights | The current 2.1 official listing includes road signs and traffic lights; a selected subset is already imported. |
+| District identity variety — Iron Quay / Glass Coast / Downtown | [Kenney City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial) and [City Kit (Industrial)](https://kenney.nl/assets/city-kit-industrial) | CC0 1.0 | Skyscrapers, industrial buildings and props | Selected subsets are already imported; verify scale, pivots and materials before placing more. |
+| Track dressing — fences, barriers, billboards, pit props | [Kenney Racing Kit](https://opengameart.org/content/racing-kit) | CC0 | 70+ objects; OBJ, FBX and glTF formats | The listing says it works in Unreal; still test import scale, materials and collision in this project. |
+| PBR materials — asphalt, concrete, facade, metal | [Poly Haven](https://polyhaven.com/textures) and [ambientCG](https://ambientcg.com) | CC0 per their asset terms | Diffuse/base-color, normal, roughness, AO and displacement where available | The Asphalt Track texture is already imported. Check channel conventions and resolution before adding maps; generated project textures remain separate. |
+| One-off environment kits | [Fab](https://www.fab.com) — browse Free and Limited-Time Free offers | Varies by product and selected license | Select only assets that fit Nova City's look and target hardware | Fab's official guide says free products still require accepting the applicable EULA; a free offer is not a blanket license. Preserve the listing, license tier and acquisition record. |
+| UI — buttons, panels, sliders and icons | [Kenney UI Pack](https://kenney.nl/assets/ui-pack) | CC0 | Review the 430-file pack for suitable sprites | The listing identifies UI elements; do not assume it contains fonts or sound until the downloaded archive is checked. |
+| Ambient/impact/environment SFX | [Freesound.org](https://freesound.org) | Per-file Creative Commons license | Rain, wind, impacts and crowd ambience | Filter to CC0 where practical and record each selected sound's own license and attribution conditions. |
 | Engine/exhaust recordings | — | — | — | No good CC0 option exists for a *specific* fictional car's tone. Your synthesized layers stay the right call until you record your own or license a pack — a generic freesound clip won't match a bespoke torque curve anyway |
 
 ## What NOT to source externally
 
-`ARCHITECTURE.md` is explicit that the five hero vehicles are original and fictional — that identity (Aster S6, Kestrel XR, Meridian GT) is a real asset, not a placeholder gap. Swapping a generic CC0 mesh in as one of these hero bodies would undercut the one thing meant to be yours. Keep free assets for background/environment dressing — exactly how the CC0 city car is already used — and for generic reusable interior parts (wheels, generic seats) you reskin, not for the five named cars' bodies.
+`ARCHITECTURE.md` is explicit that the five hero vehicles are original and fictional. Do not use generic downloaded meshes as their bodies. Keep third-party content to documented environment/background dressing and generic reusable interior parts that are appropriately adapted; the imported city car remains non-colliding scenery, not a player or traffic car.
 
 ## Provenance entry template
 
@@ -41,3 +41,5 @@ Copy into `ASSET_PROVENANCE.md` for every asset that reaches a package — same 
 
 The license and source attribution were checked against the publisher page on <date>.
 ```
+
+The 2026-09-27 live check confirmed CC0 on the official Kenney City Kit Roads, Commercial, Industrial and UI Pack pages; the Kenney Racing Kit listing also states CC0; Poly Haven states all its assets use CC0; and ambientCG's current asset listing states its assets are CC0. Fab product licenses differ, so inspect each product's selected license and EULA. Freesound licenses are attached to individual sound uploads. [Fab download/license guidance](https://dev.epicgames.com/documentation/fab/purchasing-and-downloading-assets-in-fab), [Freesound licensing FAQ](https://freesound.org/help/faq/).

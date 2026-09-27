@@ -5,9 +5,49 @@
 // explicitly resample after recovery; a teleport never grants a checkpoint.
 #include <cmath>
 #include <cstddef>
+#include <algorithm>
 
 namespace ADRaceRules
 {
+enum class Grade : unsigned char { D, C, B, A, S, SS, SSS };
+
+inline const char* GradeName(Grade Value)
+{
+    switch (Value)
+    {
+    case Grade::C: return "C";
+    case Grade::B: return "B";
+    case Grade::A: return "A";
+    case Grade::S: return "S";
+    case Grade::SS: return "SS";
+    case Grade::SSS: return "SSS";
+    default: return "D";
+    }
+}
+
+// Results are presentation-only. Clean first place and a sub-par time are
+// required for SSS; recoveries and finishing position reduce the grade.
+inline Grade CalculateGrade(double TotalSeconds, double ParSeconds, int Place,
+    int Recoveries, bool bFinished)
+{
+    if (!bFinished || !std::isfinite(TotalSeconds) || TotalSeconds <= 0.0
+        || !std::isfinite(ParSeconds) || ParSeconds <= 0.0
+        || Place < 1 || Place > 4 || Recoveries < 0) return Grade::D;
+
+    const double Ratio = TotalSeconds / ParSeconds;
+    if (!std::isfinite(Ratio)) return Grade::D;
+    if (Place == 1 && Recoveries == 0 && Ratio <= 0.95) return Grade::SSS;
+
+    const double Score = 100.0 - std::max(0.0, Ratio - 0.95) * 150.0
+        - Recoveries * 20.0 - (Place - 1) * 8.0;
+    if (Score >= 90.0) return Grade::SS;
+    if (Score >= 78.0) return Grade::S;
+    if (Score >= 65.0) return Grade::A;
+    if (Score >= 50.0) return Grade::B;
+    if (Score >= 35.0) return Grade::C;
+    return Grade::D;
+}
+
 struct Vector3
 {
     double X = 0.0, Y = 0.0, Z = 0.0;

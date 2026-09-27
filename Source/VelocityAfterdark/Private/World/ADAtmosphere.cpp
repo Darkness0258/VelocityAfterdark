@@ -395,7 +395,8 @@ void AADAtmosphere::UpdateRain(float ElapsedSeconds)
     const FVector Center = Car->GetActorLocation();
     const FVector VehicleVelocity = Car->GetVelocity().GetClampedToMaxSize(12000.f);
     const FVector WorldFallVelocity(95.f,30.f,-RainSpeedCmPerSecond);
-    const FVector ScreenFallVelocity = (WorldFallVelocity - VehicleVelocity).GetSafeNormal(FVector(0.f,0.f,-1.f));
+    FVector ScreenFallVelocity = WorldFallVelocity - VehicleVelocity;
+    if (!ScreenFallVelocity.Normalize()) ScreenFallVelocity = FVector(0.f,0.f,-1.f);
     const float VehicleSpeedFactor = FMath::Clamp(VehicleVelocity.Size2D()/9000.f,0.f,1.f);
     const FRotator StreakRotation = FRotationMatrix::MakeFromZ(ScreenFallVelocity).Rotator();
     const FVector Min = Center - FVector(RainRadiusCm,RainRadiusCm,100.f);

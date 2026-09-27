@@ -10,6 +10,8 @@
 #include "Racing/ADRaceManager.h"
 #include "Settings/ADSettingsSubsystem.h"
 #include "World/ADExplorationDirector.h"
+#include "Player/ADVehiclePawn.h"
+#include "World/ADPoliceDirector.h"
 
 AADPlayerController* UADMapComponent::Controller() const { return Cast<AADPlayerController>(GetOwner()); }
 AADExplorationDirector* UADMapComponent::GetExploration() const
@@ -24,9 +26,11 @@ void UADMapComponent::Toggle()
     auto* PC=Controller();
     const auto* Director=GetExploration();
     const auto* Settings=GetWorld()->GetGameInstance()->GetSubsystem<UADSettingsSubsystem>();
+    const auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>();
     if (!PC || !Director || !Director->IsReady() || !PC->IsSessionStarted() || PC->IsGamePaused()
         || PC->GetGarageSession()->IsActive() || PC->GetCinematic()->IsActive() || (Settings && Settings->IsOpen())
-        || (PC->GetRaceManager() && PC->GetRaceManager()->GetState()!=EADRaceState::Idle)) return;
+        || (PC->GetRaceManager() && PC->GetRaceManager()->GetState()!=EADRaceState::Idle)
+        || (Mode && Mode->GetPoliceDirector() && Mode->GetPoliceDirector()->IsActive())) return;
     bPausedByMap=!PC->IsPaused();
     if (bPausedByMap && !PC->SetPause(true)) { bPausedByMap=false; return; }
     bPreviousCursor=PC->bShowMouseCursor;
@@ -87,6 +91,72 @@ void UADMapComponent::Confirm()
 }
 void UADMapComponent::FollowNearest()
 { if (bOpen) { if (auto* Director=GetExploration()) Director->ClearTrackedDiscovery(); Close(); } }
+
+void UADMapComponent::FastTravel()
+{
+    if (!bOpen) return;
+    auto* PC=Controller();
+    auto* Director=GetExploration();
+    const auto* Location=GetSelectedLocation();
+    auto* Mode=GetWorld() ? GetWorld()->GetAuthGameMode<AADGameMode>() : nullptr;
+    auto* Car=PC ? PC->GetVehiclePawn() : nullptr;
+    if (!PC || !Director || !Mode || !Car || !PC->IsSessionStarted())
+    { Message=TEXT("FAST TRAVEL IS UNAVAILABLE RIGHT NOW."); return; }
+    if (const AADRaceManager* Race=Mode->GetRaceManager(); Race && Race->GetState()!=EADRaceState::Idle)
+    { Message=TEXT("FINISH OR LEAVE THE EVENT BEFORE FAST TRAVEL."); return; }
+    if (const AADPoliceDirector* Police=Mode->GetPoliceDirector(); Police && Police->IsActive())
+    { Message=TEXT("LOSE THE POLICE SEARCH BEFORE FAST TRAVEL."); return; }
+    if (!Location || !Director->IsDiscovered(Location->Id))
+    { Message=TEXT("SELECT A DISCOVERED LANDMARK TO FAST TRAVEL."); return; }
+
+    PC->FlushPressedKeys();
+    FString Error;
+    if (!Director->FastTravelToDiscovery(Car,Location->Id,Error))
+    { Message=Error; return; }
+    if (PC->GetCinematic()) PC->GetCinematic()->NotifyRecordingDiscontinuity();
+    Message=FString::Printf(TEXT("ARRIVED AT %s  /  SPEED AND CONTROLS RESET"),*Location->Name.ToUpper());
+}
+
+void UADMapComponent::ClearWaypoint()
+{
+    if (!bOpen) return;
+    auto* Ownership=GetWorld()->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
+    if (!Ownership || !Ownership->GetProfile().World.bCustomWaypointRecorded)
+    { Message=TEXT("NO CUSTOM WAYPOINT IS SET."); return; }
+    FString Error;
+    Message=Ownership->SetCustomWaypoint(false,FVector2D::ZeroVector,Error)
+        ? TEXT("CUSTOM WAYPOINT CLEARED.") : TEXT("WAYPOINT SAVE FAILED: ")+Error;
+}
+
+void UADMapComponent::Zoom(float Delta)
+{ if (bOpen && FMath::IsFinite(Delta)) ZoomFactor=FMath::Clamp(ZoomFactor+Delta,.65f,2.4f); }
+
+void UADMapComponent::Pan(FVector2D WorldDelta)
+{
+    if (!bOpen || !FMath::IsFinite(WorldDelta.X) || !FMath::IsFinite(WorldDelta.Y)) return;
+    PanCenter.X=FMath::Clamp(PanCenter.X+WorldDelta.X,-200000.,200000.);
+    PanCenter.Y=FMath::Clamp(PanCenter.Y+WorldDelta.Y,-200000.,200000.);
+}
+
+void UADMapComponent::SetWaypoint(FVector2D CanvasPosition)
+{
+    auto* Director=GetExploration();
+    auto* Ownership=GetWorld()->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
+    if (!Director || !Ownership) { Message=TEXT("MAP DATA IS UNAVAILABLE."); return; }
+    const FVector2D WorldPoint=ADMapLayout::Unproject(CanvasPosition,ZoomFactor,PanCenter);
+    TArray<FVector2D> Route;
+    double DistanceCm=0.;
+    FString Error;
+    if (!Director->GetRoadNetwork().BuildRoute(WorldPoint,WorldPoint,Route,DistanceCm,Error) || Route.IsEmpty())
+    { Message=TEXT("WAYPOINT MUST BE PLACED NEAR A CONNECTED ROAD."); return; }
+    const FVector2D RoadPoint=Route.Last();
+    if (FVector2D::Distance(WorldPoint,RoadPoint)>1800.)
+    { Message=TEXT("WAYPOINT MUST BE PLACED ON OR BESIDE A ROAD."); return; }
+    if (!Ownership->SetCustomWaypoint(true,RoadPoint,Error))
+    { Message=TEXT("WAYPOINT SAVE FAILED: ")+Error; return; }
+    Message=TEXT("CUSTOM WAYPOINT SAVED.");
+}
+
 void UADMapComponent::Click(FVector2D Position)
 {
     if (!bOpen) return;
@@ -104,9 +174,12 @@ void UADMapComponent::Click(FVector2D Position)
     for (int32 Row=0;Row<VisibleLocations.Num();++Row)
     {
         const auto& Location=Ownership->GetDiscoveries()[VisibleLocations[Row]];
-        if (FVector2D::Distance(Position,ADMapLayout::Project(Location.Position))<20.)
+        if (FVector2D::Distance(Position,Project(Location.Position))<20.)
         { SelectedRow=Row; Confirm(); return; }
     }
+    if (Position.X>=ADMapLayout::X && Position.X<=ADMapLayout::X+ADMapLayout::Width
+        && Position.Y>=ADMapLayout::Y && Position.Y<=ADMapLayout::Y+ADMapLayout::Height)
+        SetWaypoint(Position);
 }
 void UADMapComponent::EndPlay(const EEndPlayReason::Type Reason)
 { Close(); Super::EndPlay(Reason); }

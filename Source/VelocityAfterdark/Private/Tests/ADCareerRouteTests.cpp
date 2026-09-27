@@ -55,6 +55,7 @@ bool FADCareerRouteCatalogTest::RunTest(const FString&)
         TestEqual(TEXT("Career races contain three opponents"),Race.Opponents.Num(),3);
         TestEqual(TEXT("Four physical starting positions"),Race.Grid.Num(),4);
         TestTrue(TEXT("Event has a drivable kilometre-scale route"),Race.RouteLengthM>1000.);
+        TestTrue(TEXT("Event has a route-specific grade par under its timeout"),Race.ParSeconds>30. && Race.ParSeconds<Race.TimeoutSeconds);
     }
     TestEqual(TEXT("Route identities do not alias"),Ids.Num(),Catalog.GetRaces().Num());
     const auto* Sprint=Catalog.Find(TEXT("afterdark_sprint_v1"));
@@ -166,6 +167,57 @@ bool FADCareerProgressionRouteTest::RunTest(const FString&)
     TestEqual(TEXT("Full career awards 8000 REP"),Profile.Reputation,int64(8000));
     TestNull(TEXT("Completed series has no active event"),Career->GetActiveChapter(Profile));
     TestEqual(TEXT("Final rank is earned"),Career->GetRankName(Profile.Reputation),FString(TEXT("Afterdark Champion")));
+    const auto& Chapters=Career->GetChapters();
+    FADRaceCatalog RaceCatalog;
+    if (!TestTrue(TEXT("Rival appearances resolve through the production race catalog"),RaceCatalog.LoadDefault(Error)))
+    { AddError(Error); return false; }
+    TestEqual(TEXT("Dockside opens with Iron Wolves leader Dax Kerr"),Chapters[0].Crew,FString(TEXT("Iron Wolves")));
+    TestEqual(TEXT("Ivo Renn appears across four chapters"),
+        Chapters.FilterByPredicate([](const auto& Item){ return Item.Leader==TEXT("Ivo Renn")
+            || Item.Briefing.Contains(TEXT("Ivo Renn")) || Item.VictoryLine.Contains(TEXT("Ivo Renn")); }).Num(),4);
+    TestEqual(TEXT("Sel Arden appears in two chapters and the final invitation"),
+        Chapters.FilterByPredicate([](const auto& Item){ return Item.Leader==TEXT("Sel Arden")
+            || Item.Briefing.Contains(TEXT("Sel Arden")) || Item.VictoryLine.Contains(TEXT("Sel Arden")); }).Num(),3);
+    TestTrue(TEXT("Opening briefing brings Mara Venn into the story"),Chapters[0].Briefing.Contains(TEXT("Mara Venn")));
+    TestTrue(TEXT("Final opens with Sel Arden's invitation"),Chapters.Last().Briefing.Contains(TEXT("Sel Arden")));
+    TestTrue(TEXT("Sable Ring hands the rivalry forward to Ivo"),Chapters[6].VictoryLine.Contains(TEXT("Ivo steps forward")));
+    TestTrue(TEXT("Final victory names the player as champion"),Chapters.Last().VictoryLine.Contains(TEXT("Afterdark Champion")));
+    const auto HasDriver = [&RaceCatalog,&Chapters,this](const TCHAR* ChapterId,const TCHAR* DriverId)
+    {
+        const FADCareerChapter* Chapter=Chapters.FindByPredicate([ChapterId](const auto& Item){return Item.Id==ChapterId;});
+        const FADRaceDefinition* Race=Chapter ? RaceCatalog.Find(Chapter->RaceId) : nullptr;
+        return TestTrue(FString::Printf(TEXT("%s is a physical entrant in %s"),DriverId,ChapterId),
+            Race && Race->Opponents.ContainsByPredicate([DriverId](const FADRaceOpponent& Opponent){return Opponent.Id==DriverId;}));
+    };
+    HasDriver(TEXT("arrival"),TEXT("dax_kerr"));
+    HasDriver(TEXT("dockside_regular"),TEXT("ivo_renn"));
+    HasDriver(TEXT("iron_chord"),TEXT("ivo_renn"));
+    HasDriver(TEXT("night_survey"),TEXT("sel_arden"));
+    HasDriver(TEXT("slipstream_union"),TEXT("sel_arden"));
+    HasDriver(TEXT("glass_hour"),TEXT("reya_voss"));
+    HasDriver(TEXT("invitation"),TEXT("wren_ashby"));
+    HasDriver(TEXT("invitation"),TEXT("ivo_renn"));
+    HasDriver(TEXT("afterdark_final"),TEXT("ivo_renn"));
+    HasDriver(TEXT("afterdark_final"),TEXT("sel_arden"));
+
+    FADGarageProfile RivalProfile;
+    FADRivalMemory IvoMemory;
+    IvoMemory.RivalId=TEXT("ivo_renn"); IvoMemory.Encounters=2; IvoMemory.PlayerWins=1; IvoMemory.RivalWins=1;
+    IvoMemory.Respect=.62f; IvoMemory.Grudge=.08f;
+    RivalProfile.RivalMemories.Add(IvoMemory);
+    const FADCareerChapter& Invitation=Chapters[6];
+    const FADCareerChapter& Finale=Chapters.Last();
+    const auto* InvitationRace=RaceCatalog.Find(Invitation.RaceId);
+    const auto* FinaleRace=RaceCatalog.Find(Finale.RaceId);
+    TestTrue(TEXT("Ivo memory changes the Sable Ring briefing"),InvitationRace
+        && Career->ComposeBriefing(RivalProfile,Invitation,*InvitationRace).Contains(TEXT("Ivo Renn remembers your tied series")));
+    TestTrue(TEXT("Ivo memory appears in the finale victory metadata"),FinaleRace
+        && Career->ComposeVictoryLine(RivalProfile,Finale,*FinaleRace).Contains(TEXT("Ivo Renn series: 1 to 1")));
+    FADRivalMemory SelMemory;
+    SelMemory.RivalId=TEXT("sel_arden"); SelMemory.Encounters=1; SelMemory.PlayerWins=0; SelMemory.RivalWins=1;
+    RivalProfile.RivalMemories.Reset(); RivalProfile.RivalMemories.Add(SelMemory);
+    TestTrue(TEXT("Sel memory changes the finale invitation"),FinaleRace
+        && Career->ComposeBriefing(RivalProfile,Finale,*FinaleRace).Contains(TEXT("Sel Arden beat you last time")));
     Swap(Profile.CompletedChapters[0],Profile.CompletedChapters[1]);
     TestNull(TEXT("Reordered save progress is rejected"),Career->GetActiveChapter(Profile));
 

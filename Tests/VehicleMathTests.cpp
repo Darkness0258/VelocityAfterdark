@@ -28,8 +28,35 @@ int main()
         "torque endpoints remain bounded");
     Check(SampleTorque<TorquePoint>(nullptr, 0, 4000) == 0, "empty torque curve fails safe");
     Check(Near(WheelRpm(2*Pi*.34, .34), 60), "one wheel revolution per second is 60 RPM");
+    Check(Near(SlipRatio(20,20),0), "a freely rolling wheel has zero longitudinal slip");
+    Check(SlipRatio(22,20)>0 && SlipRatio(18,20)<0, "wheelspin and braking slip retain opposite signs");
+    Check(LongitudinalTireForceN(0,4200)==0, "a tire at free-rolling slip has no longitudinal demand");
+    Check(LongitudinalTireForceN(.2,4200)>0 && LongitudinalTireForceN(-.2,4200)<0,
+        "longitudinal tire force follows driven and braking slip");
+    Check(std::abs(LongitudinalTireForceN(3,4200))<=4200,
+        "longitudinal slip force remains inside the tire capacity");
     Check(Near(DriveForceN(300, 3, 4, .9, .3), 10800), "torque converts to tire force");
     Check(Near(DriveForceN(300, -3, 4, .9, .3), -10800), "reverse torque sign");
+    const double InitialWheelOmega=20./.34;
+    auto RollDrivenWheel=[&](double Step)
+    {
+        double Omega=InitialWheelOmega;
+        const int Count=static_cast<int>(std::round(1.0/Step));
+        for (int Index=0;Index<Count;++Index)
+            Omega=SolveWheelTireStep(Omega,20.,220.,0.,4200.,.34,1.2,Step).AngularSpeedRadPerSecond;
+        return Omega;
+    };
+    const double Omega30=RollDrivenWheel(1./30), Omega60=RollDrivenWheel(1./60), Omega120=RollDrivenWheel(1./120);
+    Check(std::abs(Omega30-Omega120)<.02 && std::abs(Omega60-Omega120)<.02,
+        "implicit driven-wheel inertia agrees at 30, 60 and 120 Hz");
+    const WheelTireStep BrakeStep=SolveWheelTireStep(InitialWheelOmega,20.,0.,800.,4200.,.34,1.2,1./60);
+    Check(BrakeStep.AngularSpeedRadPerSecond<InitialWheelOmega && BrakeStep.AngularSpeedRadPerSecond>0
+        && BrakeStep.LongitudinalForceN<0,
+        "braking slows but does not reverse a rolling wheel and produces retarding grip");
+    const WheelTireStep AirborneWheel=SolveWheelTireStep(0.,0.,100.,0.,0.,.34,1.2,.1);
+    Check(Near(AirborneWheel.AngularSpeedRadPerSecond,100.*.1/1.2)
+        && AirborneWheel.LongitudinalForceN==0,
+        "an airborne driven wheel free-spins without creating tire force");
     Check(EngineRpm(0, .34, 3, 4, 850, 7200) == 850, "idle clutch bound");
     Check(EngineRpm(200, .34, 3, 4, 850, 7200) == 7200, "redline bound");
 

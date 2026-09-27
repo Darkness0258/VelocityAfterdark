@@ -6,6 +6,7 @@
   "countdownSeconds": 3,
   "timeoutSeconds": 330,
   "recoveryPenaltySeconds": 5,
+  "parSeconds": 203,
   "difficultySpeedScales": [
     0.8,
     0.95,
@@ -423,7 +424,7 @@
   ],
   "opponents": [
     {
-      "name": "Inez Vale",
+      "name": "Wren Ashby",
       "color": [
         0.92,
         0.19,
@@ -431,7 +432,7 @@
       ],
       "speedScale": 1.0,
       "laneOffsetCm": 300,
-      "id": "inez_vale",
+      "id": "wren_ashby",
       "personality": {
         "overtakeAggression": 0.54,
         "brakingConservatism": 0.81,
@@ -439,7 +440,7 @@
       }
     },
     {
-      "name": "Emil Rook",
+      "name": "Ivo Renn",
       "color": [
         0.12,
         0.68,
@@ -447,7 +448,7 @@
       ],
       "speedScale": 0.97,
       "laneOffsetCm": -300,
-      "id": "emil_rook",
+      "id": "ivo_renn",
       "personality": {
         "overtakeAggression": 0.77,
         "brakingConservatism": 0.62,

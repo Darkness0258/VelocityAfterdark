@@ -110,6 +110,46 @@ private:
                 const bool bHit=World->LineTraceSingleByChannel(Hit,FVector(P,500),FVector(P,-200),ECC_Visibility,Query);
                 Test->TestTrue(FString::Printf(TEXT("Road contact exists: %s"),*Road.Id),bHit && Hit.ImpactNormal.Z>.98 && FMath::Abs(Hit.ImpactPoint.Z)<50.);
             }
+
+            // Exercise the player-facing map flow against a real discovery and road graph.
+            // The first attempt must remain locked; the discovered attempt must use the
+            // normal safe placement path and preserve the one custom map waypoint.
+            auto* Ownership=World->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
+            auto* Map=PC->GetMap();
+            const auto* Landmark=Ownership ? Ownership->GetDiscoveries().FindByPredicate(
+                [](const FADDiscoveryDefinition& Item){return Item.Id==TEXT("glasswater_lights");}) : nullptr;
+            if (!Map || !Ownership || !Landmark) Test->AddError(TEXT("Map travel fixture could not resolve its controller, profile or landmark."));
+            else
+            {
+                FString MapError;
+                const FVector BeforeTravel=Car->GetActorLocation();
+                Map->Toggle();
+                Test->TestTrue(TEXT("Map opens during free drive"),Map->IsOpen());
+                if (Map->IsOpen())
+                {
+                    Test->TestEqual(TEXT("Undiscovered landmark is initially selected"),
+                        Map->GetSelectedLocation() ? Map->GetSelectedLocation()->Id : FString(),FString(TEXT("glasswater_lights")));
+                    Map->FastTravel();
+                    Test->TestTrue(TEXT("Fast travel rejects an undiscovered location"),
+                        Map->GetMessage().Contains(TEXT("DISCOVERED LANDMARK")) && Car->GetActorLocation().Equals(BeforeTravel,1.f));
+                    const bool bDiscovered=Ownership->CommitDiscovery(Landmark->Id,MapError);
+                    Test->TestTrue(TEXT("World director commits landmark discovery"),bDiscovered);
+                    if (!bDiscovered) Test->AddError(MapError);
+                    const bool bWaypointSaved=Ownership->SetCustomWaypoint(true,Landmark->Position,MapError);
+                    Test->TestTrue(TEXT("Map waypoint saves through ownership"),bWaypointSaved);
+                    if (!bWaypointSaved) Test->AddError(MapError);
+                    Map->ChangeFilter(2);
+                    Map->FastTravel();
+                    Test->TestTrue(TEXT("Discovered landmark fast travel reports success"),Map->GetMessage().Contains(TEXT("ARRIVED AT")));
+                    Test->TestTrue(TEXT("Travel places the car on the landmark road"),
+                        FVector2D::Distance(FVector2D(Car->GetActorLocation()),Landmark->Position)<=1000.);
+                    Test->TestTrue(TEXT("Travel resets vehicle momentum"),Chassis->GetPhysicsLinearVelocity().Size()<1.f);
+                    Test->TestTrue(TEXT("Travel keeps the player's single waypoint"),Ownership->GetProfile().World.bCustomWaypointRecorded
+                        && Ownership->GetProfile().World.CustomWaypoint.Equals(Landmark->Position,.1));
+                    Map->Close();
+                    Test->TestTrue(TEXT("Closing the map restores free-drive pause state"),!PC->IsPaused());
+                }
+            }
             const FADWorldSnapshot Original=Weather->CaptureWorldSnapshot();
             Weather->SetHour(23.999); Weather->SetWeather(EADWeather::Rain);
             // Drive the actual atmosphere at fixed quarter-second updates; world physics
@@ -130,6 +170,8 @@ private:
             Weather->SetFrozen(true);
             Test->TestTrue(TEXT("Pursuit starts with physical units"),Police->StartPursuit());
             Test->TestEqual(TEXT("Initial heat is one"),Police->GetHeat(),1);
+            Map->Toggle();
+            Test->TestFalse(TEXT("Map cannot bypass an active police pursuit"),Map->IsOpen());
             Test->TestFalse(TEXT("Garage rejects active pursuit"),PC->GetGarageSession()->Enter());
             const FString RaceBeforePursuit=Mode->GetRaceManager()->GetDefinition().Id;
             Test->TestFalse(TEXT("Race rejects active pursuit"),Mode->GetRaceManager()->StartRace(Car,1));
@@ -213,6 +255,8 @@ private:
             Test->TestTrue(TEXT("Replay restores chassis and force simulation"),Chassis->IsSimulatingPhysics() && Car->GetPhysics()->IsComponentTickEnabled());
             Cinematic->NotifyRecordingDiscontinuity();
             Test->TestFalse(TEXT("Recovery cannot replay across a teleport"),Cinematic->EnterReplay());
+            StoryVehicleStart=Car->GetActorTransform();
+            StoryVehicleVelocity=Chassis->GetPhysicsLinearVelocity();
             if (!Test->TestTrue(TEXT("Arrival story sequence starts"),Cinematic->PlayArrivalCutscene()))
             { Test->AddError(Cinematic->GetMessage()); return true; }
             Test->TestFalse(TEXT("Story presentation keeps the city simulation running"),PC->IsPaused());
@@ -220,7 +264,6 @@ private:
             Test->TestFalse(TEXT("Story presentation holds the player chassis safely"),Chassis->IsSimulatingPhysics());
             Test->TestFalse(TEXT("Story presentation suspends tire-force updates"),Car->GetPhysics()->IsComponentTickEnabled());
             StoryCameraStart=Cinematic->GetCinematicCameraTransform();
-            StoryVehicleStart=Car->GetActorTransform();
             StoryWorldStart=World->GetTimeSeconds();
             StoryWallStart=FPlatformTime::Seconds();
             Stage=4; StageTime=StoryWallStart; return false;
@@ -240,14 +283,17 @@ private:
             Test->TestTrue(TEXT("Story cutscene progresses to a second camera shot"),Cinematic->GetStoryShotIndex()>=2);
             Stage=6; return false;
         }
-        if (Stage==6 && FPlatformTime::Seconds()-StoryWallStart>=14.5)
+        if (Stage==6 && !Cinematic->IsActive())
         {
             Test->TestFalse(TEXT("Arrival story sequence completes without input"),Cinematic->IsActive());
             Test->TestFalse(TEXT("Story completion leaves the world unpaused"),PC->IsPaused());
             Test->TestTrue(TEXT("Story completion restores vehicle physics and force updates"),
                 Chassis->IsSimulatingPhysics() && Car->GetPhysics()->IsComponentTickEnabled());
             Test->TestTrue(TEXT("Story completion restores driving controls"),Car->IsDrivingEnabled());
-            Test->TestTrue(TEXT("Story completion preserves the original vehicle pose"),Car->GetActorTransform().Equals(StoryVehicleStart,.01));
+            Test->TestTrue(TEXT("Story completion resumes close to the held vehicle pose"),
+                FVector::Dist(Car->GetActorLocation(),StoryVehicleStart.GetLocation())<25.f);
+            Test->TestTrue(TEXT("Story completion restores vehicle momentum"),
+                FVector::Dist(Chassis->GetPhysicsLinearVelocity(),StoryVehicleVelocity)<100.f);
             return true;
         }
         return false;
@@ -261,7 +307,7 @@ private:
     int32 Stage=0;
     FTransform ReturnPose;
     FTransform StoryCameraStart,StoryVehicleStart;
-    FVector ReturnVelocity;
+    FVector ReturnVelocity,StoryVehicleVelocity;
     TMap<TWeakObjectPtr<AADVehiclePawn>,FVector> UnitStarts;
 };
 }

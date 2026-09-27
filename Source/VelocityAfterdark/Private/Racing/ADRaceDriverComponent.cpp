@@ -13,7 +13,10 @@ namespace
     constexpr double MaxLaneOffsetCm = 300.;
     constexpr double SenseIntervalSeconds = .1;
     constexpr double BrakingDecelerationMps2 = 3.5;
-    constexpr double MinimumLaneSeparationCm = 250.;
+    // Require a little more than the authored 300 cm offset between race lanes.
+    // A 250 cm test treated adjacent lanes as safely passable with only a thin
+    // margin; steering lag on a bend could then push cars into one another.
+    constexpr double MinimumLaneSeparationCm = 325.;
 
     double RouteProgressForDriver(const FADRaceDefinition& Route, const FVector& Position, const FVector& Forward,
         double& OutErrorM)
@@ -179,6 +182,7 @@ void UADRaceDriverComponent::ResetDriver()
     bNeedsRecovery = false;
     bWasAvoiding = false;
     bUnderPressure = false;
+    bFollowingStoppedVehicle = false;
     MistakeSeconds = 0.f;
     LastMistakeWindow = INDEX_NONE;
     // Lifetime counters intentionally survive a managed reset for honest results.
@@ -271,6 +275,7 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
     const double LeftClearance = SweepClearanceM(Nose + Right * (-MaxLaneOffsetCm - OwnOffset), Direction, SenseLengthM);
     const double RightClearance = SweepClearanceM(Nose + Right * (MaxLaneOffsetCm - OwnOffset), Direction, SenseLengthM);
     FollowingSpeedLimitMps = 100.;
+    bFollowingStoppedVehicle = false;
     AADVehiclePawn* Leader = nullptr;
     double LeaderGapM = 100.;
     double LeaderSpeedMps = 0.;
@@ -313,6 +318,10 @@ void UADRaceDriverComponent::Sense(double ProgressM, double SpeedMps, double Des
     if (Leader)
     {
         const double BumperGapM = FMath::Max(0., LeaderGapM - VehicleHalfLengthCm * .02);
+        // A near-stationary car in the same lane is an intentional traffic stop.
+        // Do not diagnose its follower as stuck while the lead vehicle clears or
+        // performs its own recovery maneuver.
+        bFollowingStoppedVehicle = LeaderGapM < 12. && LeaderSpeedMps < 2.0;
         const double DesiredGapM = 3. + SpeedMps * .75;
         FollowingSpeedLimitMps = FMath::Max(0., LeaderSpeedMps + (BumperGapM - DesiredGapM) * .6);
         if (BumperGapM < 2.) FollowingSpeedLimitMps = 0.;
@@ -552,7 +561,8 @@ void UADRaceDriverComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     const float Brake = bMustStop ? 1.f : static_cast<float>(FMath::Clamp(-SpeedError * .2, 0., 1.));
     Physics->SetControls(Throttle, Brake, Steering, false);
 
-    StuckSeconds = SpeedMps < 1. && (Throttle > .2f || TargetSpeedMps < 1.) ? StuckSeconds + Dt : 0.f;
+    StuckSeconds = !bFollowingStoppedVehicle && SpeedMps < 1. && (Throttle > .2f || TargetSpeedMps < 1.)
+        ? StuckSeconds + Dt : 0.f;
     OffRouteSeconds = RouteErrorM > 12. ? OffRouteSeconds + Dt : 0.f;
     HealthyDrivingSeconds = SpeedMps > 3. && RouteErrorM < 7. ? HealthyDrivingSeconds + Dt : 0.f;
     if (HealthyDrivingSeconds > 4.f) ConsecutiveRecoveryAttempts = 0;

@@ -85,7 +85,9 @@ def main() -> None:
     require(len(car["wheelAnchorsCm"]) == 4, "Four wheel anchors required")
     require(0 < car["drivetrainEfficiency"] <= 1, "Invalid efficiency")
     require(0 < car["frontBrakeBias"] < 1, "Invalid brake bias")
-    require(car["wheelRadiusM"] > 0 and car["springRateNPerM"] > 0, "Invalid wheel/spring")
+    require(car["wheelRadiusM"] > 0 and 0.2 <= car["wheelInertiaKgM2"] <= 4.0,
+            "Invalid wheel radius/inertia")
+    require(car["springRateNPerM"] > 0, "Invalid wheel/spring")
     compression = car["massKg"] * 9.81 / (4 * car["springRateNPerM"])
     require(compression < car["suspensionTravelM"], "Car bottoms out under its static load")
     require(car["suspensionRestLengthM"] - compression + car["wheelRadiusM"] > 0.24,
@@ -196,6 +198,48 @@ def main() -> None:
     race = load_json(ROOT / "Content/Data/Races/dockside_circuit.json")
     require(race["schemaVersion"] == 1 and race["laps"] == 2 and len(race["opponents"]) == 3,
             "Dockside Phase 2 requires two laps and three opponents")
+    for path in (ROOT / "Content/Data/Races").glob("*.json"):
+        data = load_json(path)
+        if "routePoints" in data:
+            require(30 <= data["parSeconds"] < data["timeoutSeconds"],
+                    f"Invalid route grade par in {path.name}")
+    career = load_json(ROOT / "Content/Data/Career/career.json")
+    chapters = career["chapters"]
+    require([item["crew"] for item in chapters] == [
+        "Iron Wolves", "Night Serpents", "Night Serpents", "Signal Red", "Signal Red",
+        "Obsidian Run", "Ghost Circuit", "ALL FIVE CREWS"],
+        "Career crew/story draft mapping has drifted")
+    require(sum(item["leader"] == "Ivo Renn" or "Ivo Renn" in item["briefing"] or
+                "Ivo Renn" in item["victoryLine"] for item in chapters) == 4
+            and sum(item["leader"] == "Sel Arden" or "Sel Arden" in item["briefing"] or
+                    "Sel Arden" in item["victoryLine"] for item in chapters) == 3
+            and "Mara Venn" in chapters[0]["briefing"],
+            "Recurring story leads are missing from the career catalog")
+    race_definitions = {
+        data["id"]: data for path in (ROOT / "Content/Data/Races").glob("*.json")
+        if path.name != "catalog.json" for data in [load_json(path)]
+    }
+    chapter_drivers = {
+        "arrival": {"dax_kerr"},
+        "dockside_regular": {"ivo_renn"},
+        "iron_chord": {"ivo_renn"},
+        "night_survey": {"sel_arden"},
+        "slipstream_union": {"sel_arden"},
+        "glass_hour": {"reya_voss"},
+        "invitation": {"wren_ashby", "ivo_renn"},
+        "afterdark_final": {"ivo_renn", "sel_arden"},
+    }
+    for chapter in chapters:
+        event = race_definitions.get(chapter["raceId"])
+        require(event is not None, f"Career route missing for {chapter['id']}")
+        opponent_ids = {opponent["id"] for opponent in event["opponents"]}
+        require(chapter_drivers[chapter["id"]] <= opponent_ids,
+                f"Story leaders are absent from the {chapter['id']} race roster")
+    require(sum("ivo_renn" in {opponent["id"] for opponent in race["opponents"]}
+                for race in race_definitions.values()) == 4
+            and sum("sel_arden" in {opponent["id"] for opponent in race["opponents"]}
+                    for race in race_definitions.values()) == 3,
+            "Stable rival identities must recur across the story event rosters")
     route = race["routePoints"]
     def on_road(point, clearance=0):
         return any(all(min(r["start"][i], r["end"][i]) - width / 2 + clearance <= point[i] <=

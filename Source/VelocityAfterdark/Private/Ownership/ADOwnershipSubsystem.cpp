@@ -21,7 +21,7 @@
 
 namespace
 {
-constexpr int32 CurrentSchema = 6;
+constexpr int32 CurrentSchema = 7;
 constexpr int64 MaxSaveBytes = 64 * 1024;
 constexpr int64 MaxCredits = 1000000000;
 constexpr int32 MaxRivalMemories = 32;
@@ -165,6 +165,9 @@ FString Encode(const FADGarageProfile& Profile)
     World->SetNumberField(TEXT("wetness"),Profile.World.Wetness);
     World->SetNumberField(TEXT("rainAmount"),Profile.World.RainAmount);
     World->SetNumberField(TEXT("fogAmount"),Profile.World.FogAmount);
+    World->SetBoolField(TEXT("customWaypointRecorded"),Profile.World.bCustomWaypointRecorded);
+    World->SetNumberField(TEXT("customWaypointX"),Profile.World.CustomWaypoint.X);
+    World->SetNumberField(TEXT("customWaypointY"),Profile.World.CustomWaypoint.Y);
     Payload->SetObjectField(TEXT("world"),World);
     FString PayloadText;
     FJsonSerializer::Serialize(Payload, TJsonWriterFactory<>::Create(&PayloadText));
@@ -250,6 +253,13 @@ EReadProfile Decode(const FString& Text, const FString& VehicleId, FADGarageProf
         Candidate.World.Wetness=static_cast<float>(Wetness);
         Candidate.World.RainAmount=static_cast<float>(Rain);
         Candidate.World.FogAmount=static_cast<float>(Fog);
+        if (Schema >= 7)
+        {
+            if (!(*World)->TryGetBoolField(TEXT("customWaypointRecorded"),Candidate.World.bCustomWaypointRecorded)
+                || !Number(*World,TEXT("customWaypointX"),-250000,250000,Candidate.World.CustomWaypoint.X,Error)
+                || !Number(*World,TEXT("customWaypointY"),-250000,250000,Candidate.World.CustomWaypoint.Y,Error))
+            { if (Error.IsEmpty()) Error=TEXT("Saved custom waypoint is invalid."); return EReadProfile::Invalid; }
+        }
     }
     Candidate.Vehicles.Reset();
     if (Schema >= 5)
@@ -652,7 +662,7 @@ bool UADOwnershipSubsystem::InitializeProfile(const FString& AbsoluteSavePath, F
     bPrimaryExisted = IFileManager::Get().FileExists(*SavePath);
     if (PrimaryResult == EReadProfile::Future) { Error = OutError; return false; }
     if (PrimaryResult == EReadProfile::Valid && ValidateProfile(Candidate, OutError))
-        Status = bMigrated ? TEXT("Legacy profile loaded; next save upgrades it to version 5.") : TEXT("Profile loaded.");
+        Status = bMigrated ? TEXT("Legacy profile loaded; next save upgrades it to version 7.") : TEXT("Profile loaded.");
     else
     {
         FString BackupText, BackupError;
@@ -947,7 +957,14 @@ bool UADOwnershipSubsystem::CommitDiscovery(const FString& LocationId,FString& O
 void UADOwnershipSubsystem::StageWorldSnapshot(const FADWorldSnapshot& Snapshot)
 {
     if (bReady && Snapshot.bRecorded && Snapshot.IsValid()
-        && (!GetWorld() || GetWorld()->GetNetMode()==NM_Standalone)) PendingWorld=Snapshot;
+        && (!GetWorld() || GetWorld()->GetNetMode()==NM_Standalone))
+    {
+        PendingWorld=Snapshot;
+        // Atmosphere owns the changing clock/weather fields. Keep the map pin
+        // owned by the profile transaction when a fresh atmosphere sample arrives.
+        PendingWorld.bCustomWaypointRecorded=Profile.World.bCustomWaypointRecorded;
+        PendingWorld.CustomWaypoint=Profile.World.CustomWaypoint;
+    }
 }
 
 bool UADOwnershipSubsystem::SaveWorldSnapshot(FString& OutError)
@@ -961,5 +978,35 @@ bool UADOwnershipSubsystem::SaveWorldSnapshot(FString& OutError)
     Candidate.World=PendingWorld;
     if (!ValidateProfile(Candidate,OutError) || !WriteProfile(Candidate,OutError)) return false;
     Profile=MoveTemp(Candidate);
+    return true;
+}
+
+bool UADOwnershipSubsystem::SetCustomWaypoint(bool bRecorded,FVector2D Position,FString& OutError)
+{
+    OutError.Reset();
+    if (!bReady) { OutError=Error.IsEmpty() ? TEXT("Ownership data is not ready.") : Error; return false; }
+    if (GetWorld() && GetWorld()->GetNetMode()!=NM_Standalone)
+    { OutError=TEXT("Personal map waypoints are available in offline free roam only."); return false; }
+    FADWorldSnapshot World=PendingWorld.bRecorded ? PendingWorld : Profile.World;
+    if (!World.bRecorded) World.bRecorded=true;
+    if (bRecorded)
+    {
+        if (!FMath::IsFinite(Position.X) || !FMath::IsFinite(Position.Y)
+            || FMath::Abs(Position.X)>250000. || FMath::Abs(Position.Y)>250000.)
+        { OutError=TEXT("Waypoint must be a finite point inside the supported city bounds."); return false; }
+        World.bCustomWaypointRecorded=true;
+        World.CustomWaypoint=Position;
+    }
+    else
+    {
+        World.bCustomWaypointRecorded=false;
+        World.CustomWaypoint=FVector2D::ZeroVector;
+    }
+    FADGarageProfile Candidate=Profile;
+    Candidate.World=World;
+    if (!ValidateProfile(Candidate,OutError) || !WriteProfile(Candidate,OutError)) return false;
+    Profile=MoveTemp(Candidate);
+    PendingWorld=World;
+    Status=bRecorded ? TEXT("Map waypoint saved.") : TEXT("Map waypoint cleared.");
     return true;
 }

@@ -423,6 +423,12 @@ void AADRaceManager::UpdateClassification()
     for (int32 I=1;I<Racers.Num();++I)
         for (int32 J=I;J>0 && Ahead(SortOrder[J],SortOrder[J-1]);--J) Swap(SortOrder[J],SortOrder[J-1]);
     for (int32 Place=0;Place<Racers.Num();++Place) Racers[SortOrder[Place]].Place=Place+1;
+    for (FADRacerState& Racer : Racers)
+    {
+        const double TotalSeconds=Racer.Progress.FinishSeconds+Racer.PenaltySeconds;
+        Racer.Grade=ADRaceRules::CalculateGrade(TotalSeconds,Definition.ParSeconds,Racer.Place,
+            Racer.RecoveryCount,Racer.Progress.Finished && !Racer.bDNF);
+    }
 }
 
 bool AADRaceManager::RecoverRacer(int32 Index)

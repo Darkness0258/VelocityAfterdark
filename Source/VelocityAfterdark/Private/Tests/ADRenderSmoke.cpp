@@ -4,6 +4,7 @@
 #include "Player/ADPlayerController.h"
 #include "Player/ADVehiclePawn.h"
 #include "Presentation/ADCinematicComponent.h"
+#include "Garage/ADGarageSessionComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
@@ -49,8 +50,32 @@ void ADStartRenderSmoke(UWorld* World)
     Later(31.f, NextCamera);
     Later(34.f, [Capture]() { Capture(TEXT("AfterdarkCockpit.png")); });
     Later(36.f, [Controller]() { if (auto* PC = Controller()) PC->ConsoleCommand(TEXT("CsvProfile STOP"), false); });
+    const TSharedRef<bool> bGarageOpened = MakeShared<bool>(false);
+    Later(36.5f, [Controller,bGarageOpened]()
+    {
+        if (auto* PC=Controller())
+        {
+            *bGarageOpened=PC->GetGarageSession() && PC->GetGarageSession()->Enter();
+            if (!*bGarageOpened) UE_LOG(LogTemp,Error,TEXT("AFTERDARK_GARAGE_SMOKE_START_FAILED"));
+        }
+    });
+    Later(38.f, [Capture]() { Capture(TEXT("AfterdarkGarage.png")); });
+    Later(39.f, [Controller,bGarageOpened]()
+    {
+        auto* PC=Controller();
+        const bool bReady=*bGarageOpened && PC && PC->GetGarageSession() && PC->GetGarageSession()->IsActive();
+        if (bReady)
+        {
+            UE_LOG(LogTemp,Display,TEXT("AFTERDARK_GARAGE_SMOKE_COMPLETE: studio materials and exposure loaded"));
+        }
+        else
+        {
+            UE_LOG(LogTemp,Error,TEXT("AFTERDARK_GARAGE_SMOKE_FAILED: garage session was not active"));
+        }
+        if (PC && PC->GetGarageSession()) PC->GetGarageSession()->Leave();
+    });
     const TSharedRef<bool> bStoryStarted = MakeShared<bool>(false);
-    Later(37.f, [Controller,bStoryStarted]()
+    Later(41.f, [Controller,bStoryStarted]()
     {
         if (auto* PC = Controller())
         {
@@ -58,11 +83,11 @@ void ADStartRenderSmoke(UWorld* World)
             if (!*bStoryStarted) UE_LOG(LogTemp,Error,TEXT("AFTERDARK_CUTSCENE_START_FAILED"));
         }
     });
-    Later(39.f, [Capture]() { Capture(TEXT("AfterdarkArrival01.png")); });
-    Later(42.f, [Capture]() { Capture(TEXT("AfterdarkArrival02.png")); });
-    Later(46.f, [Capture]() { Capture(TEXT("AfterdarkArrival03.png")); });
-    Later(50.f, [Capture]() { Capture(TEXT("AfterdarkArrival04.png")); });
-    Later(54.f, [Controller,bStoryStarted]()
+    Later(43.f, [Capture]() { Capture(TEXT("AfterdarkArrival01.png")); });
+    Later(46.f, [Capture]() { Capture(TEXT("AfterdarkArrival02.png")); });
+    Later(50.f, [Capture]() { Capture(TEXT("AfterdarkArrival03.png")); });
+    Later(54.f, [Capture]() { Capture(TEXT("AfterdarkArrival04.png")); });
+    Later(58.f, [Controller,bStoryStarted]()
     {
         auto* PC=Controller();
         auto* Car=PC ? PC->GetVehiclePawn() : nullptr;
@@ -71,11 +96,17 @@ void ADStartRenderSmoke(UWorld* World)
             && !PC->GetCinematic()->IsActive() && !PC->IsPaused()
             && Car->IsDrivingEnabled() && Chassis && Chassis->IsSimulatingPhysics()
             && Car->GetPhysics()->IsComponentTickEnabled();
-        if (bComplete) UE_LOG(LogTemp,Display,TEXT("AFTERDARK_CUTSCENE_SMOKE_COMPLETE: four animated arrival shots and safe return to driving"));
-        else UE_LOG(LogTemp,Error,TEXT("AFTERDARK_CUTSCENE_SMOKE_FAILED: sequence did not finish in a driveable state"));
+        if (bComplete)
+        {
+            UE_LOG(LogTemp,Display,TEXT("AFTERDARK_CUTSCENE_SMOKE_COMPLETE: four animated arrival shots and safe return to driving"));
+        }
+        else
+        {
+            UE_LOG(LogTemp,Error,TEXT("AFTERDARK_CUTSCENE_SMOKE_FAILED: sequence did not finish in a driveable state"));
+        }
         UE_LOG(LogTemp, Display, TEXT("AFTERDARK_RENDER_SMOKE_COMPLETE"));
     });
-    Later(60.f, []()
+    Later(62.f, []()
     {
         if (FParse::Param(FCommandLine::Get(), TEXT("AfterdarkSmokeExit"))) FPlatformMisc::RequestExit(false);
     });

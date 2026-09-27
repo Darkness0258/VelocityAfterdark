@@ -2,240 +2,41 @@
 
 ## Layers of evidence
 
-1. Portable C++ tests verify the actual numerical helpers used by the Unreal component: torque interpolation, sanitization, friction limits, braking sign, speed-dependent steering and decay. These do not compile UCLASS code or exercise Chaos.
-2. Source/data checks parse JSON and editor Python, validate content contracts and project wiring. These do not establish that Unreal APIs compile.
-3. UnrealBuildTool/UHT compile the module. Editor bootstrap creates and saves materials/map. Unreal automation exercises data and runtime where tests are implemented. A successful build does not prove the car handles well.
-4. PIE, standalone and cooked executable tests verify contact stability, input, audio, rendering and packaged data. Human handling/art review and physical controller checks remain explicit acceptance gates.
+1. Portable C++ tests verify numerical vehicle math and race rules. They do not compile Unreal classes or exercise Chaos.
+2. Source/data checks parse project text, JSON, editor scripts and wiring. They do not prove Unreal APIs compile or gameplay feels correct.
+3. UnrealBuildTool/UHT and Editor automation verify compilation, data loading and the runtime behaviors covered by each test.
+4. Cooked-game runs verify packaged assets and rendering. Human handling/art/audio review, physical devices, network fault testing and performance profiling remain separate acceptance gates.
+
+The latest checked-in evidence at this audit is `Artifacts/UnrealTests/index.json`: 54 Unreal Editor cases passed, with 0 failures and 0 not-run cases. The corresponding source checks passed 157 project text files, `Test-Core.ps1` passed 971 numerical checks, and `Test-RaceRules.ps1` passed 401 race-rule checks. Read `Docs/VALIDATION.md` for the matching cooked-package report and limits; do not combine reports from different builds as if they were one test run.
 
 ## Phase 1 manual matrix
 
 | Test | Procedure | Pass condition |
 |---|---|---|
-| Cold boot | Build, bootstrap, open root project, Play, start driving | Car/city/HUD visible, no missing content or data errors |
-| Launch | Full throttle on clear straight, 5 repetitions | Car moves forward, gears/RPM respond, no oscillation or airborne launch |
-| Braking | Brake from 100 km/h, then hold at rest | Speed reduces without powered reverse or persistent drift at rest |
-| Steering | Slalom at 30, 80 and 150 km/h, release wheel | Responsive low speed, bounded high-speed yaw, recoverable traction |
-| Frame rate | Same inputs at t.MaxFPS 30, 60, 120 | 0–100 and stopping distance within 5%; no unstable suspension; record actual values |
-| Low FPS | 15 FPS and a 100ms hitch | No NaN/explosion/stuck input; note deviations; do not extrapolate stability below supported envelope |
-| Suspension | Curb hit, diagonal bump, settle after drop | Correct wheel contact/visuals, no persistent bouncing, no chassis tunneling |
-| Collision | Wall, glancing barrier, head-on at several speeds | Stable collision response; recovery valid; no map escape exploit |
-| Recovery | Flip car, fall below district, request recovery | Zero velocities, upright safe spawn, cleared controls and wheel state |
-| Manual/reverse | Shift at limits; request reverse at speed and rest | Gear bounds enforced, no sudden direction reversal at speed |
-| Camera | Chase near obstacles, hood, cockpit | No persistent geometry clipping, usable framing, bounded FOV |
-| Inputs | Keyboard, analog pad triggers/stick, switch devices | Progressive analog values; no stale input; both keyboard directions work |
-| Disconnect | Hold accelerator, unplug pad, reconnect | Throttle clears and can be reacquired; no drive-away on unplug |
-| Focus/pause | Hold controls, Alt-Tab, pause/resume | No retained throttle/steer; audio pause/resume behaves correctly |
-| Audio | Idle, full load, shifts, coast, repeated pause | Continuous RPM/load response; no clicks, clipping or orphan audio |
-| Display | 1280×720, 1920×1080, ultrawide and window resize | HUD inside safe area, speed/gear readable, no stretched layout |
-| Performance | Warm route, chosen baseline hardware/preset | Recorded 120s CPU/GPU traces, 60 FPS target evaluated honestly |
-| Package | Cook/build Windows Development; launch outside editor | JSON, generated map/materials and engine meshes load correctly |
-| Content error | Corrupt/missing vehicle or district JSON | Explicit diagnostic, no uncontrolled simulation or silent default success |
+| Cold boot | Build, bootstrap, open the root project, Play, then start driving | Car, city and HUD appear without missing-content or data errors |
+| Launch | Full throttle on a clear straight, five repetitions | Car moves forward; gears/RPM respond; no oscillation or airborne launch |
+| Braking | Brake from 100 km/h, then hold at rest | Speed falls without powered reverse or persistent drift |
+| Steering | Slalom at 30, 80 and 150 km/h, then release steering | Responsive at low speed; bounded yaw at high speed; recoverable traction |
+| Frame rate | Repeat fixed inputs at 30, 60 and 120 Hz | 0–100 and stopping distance within 5%; no unstable suspension |
+| Low FPS | Test at 15 FPS and after a 100 ms hitch | No NaN/explosion/stuck input; document any supported-envelope deviation |
+| Suspension | Hit a curb and diagonal bump; settle after a drop | Stable wheel contact and recovery; no persistent bounce or tunneling |
+| Collision | Wall, glancing barrier and head-on impacts at several speeds | Stable response; recovery works; no map escape exploit |
+| Recovery | Flip or drop below the district, then request recovery | Safe upright spawn, zeroed velocities, cleared controls and wheel state |
+| Manual/reverse | Shift at limits; request reverse while moving and at rest | Gear bounds hold; no sudden direction reversal at speed |
+| Camera | Chase near obstacles, hood and cockpit views | Usable framing with no persistent clipping or excessive FOV |
+| Inputs | Keyboard, analog triggers/stick, and device switching | Progressive analog values, no stale input, both keyboard directions work |
+| Disconnect | Hold accelerator, unplug and reconnect a pad | Throttle clears and can be reacquired safely |
+| Focus/pause | Hold controls, Alt-Tab, pause and resume | No retained throttle/steer; audio pauses and resumes correctly |
+| Audio | Idle, full load, shifts, coast and repeated pause | Continuous RPM/load response; no clicks, clipping or orphan audio |
+| Display | 1280×720, 1920×1080, ultrawide and resize | HUD stays in safe areas; speed/gear remain readable |
+| Performance | Warm route on named baseline hardware/preset | Capture CPU/GPU frame times and evaluate the 60 FPS target honestly |
+| Package | Cook Windows Development and launch outside the editor | JSON, generated/imported content and runtime meshes load correctly |
+| Content error | Corrupt or remove required vehicle/district JSON | Visible diagnostic; no uncontrolled simulation or silent success |
 
-## Later regression additions
+## Cross-system regressions
 
-Phase 2 automation is described in the race verification section below.
+Phase 2 race automation checks directed ordered gates, skipped-gate rejection, timing, restart and physical AI finishes. Later tests cover ownership transactions and migrations, map projection and waypoint persistence, discovery rewards, career progression, effective upgrades, input/settings changes, world systems, photo/replay return state, and regional races. The precise assertion list belongs in `Docs/CONSOLIDATED_TEST_PLAN.md` and the actual results belong in the run report.
 
-Phase 3: invalid upgrades, incompatible parts, insufficient credits, double transactions, corrupt/truncated saves, migration fixtures and backup recovery. Phase 4: weather interpolation, dry-to-wet grip changes, time-only races, traffic lights and queues. Phase 5: line-of-sight/search transitions and roadblock placement. Phase 9: delayed/reordered command packets, clock manipulation, unauthorized currency changes and result replay.
+Manual or extended acceptance still includes steering feel, suspension across frame rates, player-obstructed traffic queues, police tactics beyond pursuit/search, weather persistence and visibility, safe full-speed streaming, complete career save/relaunch and reward retry paths, every settings option, visual map layout at device resolutions, physical controller/wheel disconnects, full-scene replay quality, external-network faults, audio listening, and long-run memory/performance behavior.
 
-Store reports in `Artifacts/` and maintain a concise truthful `Docs/VALIDATION.md`. Report build/test command, exit code/* Generated by Cython 3.3.0 */
-
-/* BEGIN: Cython Metadata
-{
-    "distutils": {
-        "depends": [],
-        "include_dirs": [
-            "C:\\vcpkg\\installed\\x64-windows-release\\include"
-        ],
-        "libraries": [
-            "libpq",
-            "ws2_32"
-        ],
-        "library_dirs": [
-            "C:\\vcpkg\\installed\\x64-windows-release\\lib"
-        ],
-        "name": "psycopg_binary.pq",
-        "sources": [
-            "psycopg_binary/pq.pyx"
-        ]
-    },
-    "module_name": "psycopg_binary.pq"
-}
-END: Cython Metadata */
-
-#ifndef PY_SSIZE_T_CLEAN
-#define PY_SSIZE_T_CLEAN
-#endif /* PY_SSIZE_T_CLEAN */
-/* InitLimitedAPI */
-#if defined(Py_LIMITED_API)
-  #if !defined(CYTHON_LIMITED_API)
-  #define CYTHON_LIMITED_API 1
-  #endif
-#elif defined(CYTHON_LIMITED_API)
-  #ifdef _MSC_VER
-  #pragma message ("Limited API usage is enabled with 'CYTHON_LIMITED_API' but 'Py_LIMITED_API' does not define a Python target version. Consider setting 'Py_LIMITED_API' instead.")
-  #else
-  #warning Limited API usage is enabled with 'CYTHON_LIMITED_API' but 'Py_LIMITED_API' does not define a Python target version. Consider setting 'Py_LIMITED_API' instead.
-  #endif
-#endif
-
-#include "Python.h"
-#ifndef Py_PYTHON_H
-    #error Python headers needed to compile C extensions, please install development version of Python.
-#elif PY_VERSION_HEX < 0x03090000
-    #error Cython requires Python 3.9+.
-#elif defined(Py_LIMITED_API) && (Py_LIMITED_API & 0xFFFF0000) > (PY_VERSION_HEX & 0xFFFF0000)
-    #error 'Py_LIMITED_API' can only select past Python X.Y versions, not future ones.
-#else
-#define __PYX_ABI_VERSION "3_3_0"
-#define CYTHON_HEX_VERSION 0x030300F0
-#define CYTHON_FUTURE_DIVISION 1
-/* CModulePreamble */
-#include <stddef.h>
-#ifndef offsetof
-  #define offsetof(type, member) ( (size_t) & ((type*)0) -> member )
-#endif
-#if !defined(_WIN32) && !defined(WIN32) && !defined(MS_WINDOWS)
-  #ifndef __stdcall
-    #define __stdcall
-  #endif
-  #ifndef __cdecl
-    #define __cdecl
-  #endif
-  #ifndef __fastcall
-    #define __fastcall
-  #endif
-#endif
-#ifdef __has_builtin
-  #define __Pyx_has_cbuiltin(name) __has_builtin(name)
-#else
-  #define __Pyx_has_cbuiltin(name) (0)
-#endif
-#ifndef DL_IMPORT
-  #define DL_IMPORT(t) t
-#endif
-#ifndef DL_EXPORT
-  #define DL_EXPORT(t) t
-#endif
-#define __PYX_COMMA ,
-#ifndef PY_LONG_LONG
-  #define PY_LONG_LONG LONG_LONG
-#endif
-#ifndef Py_HUGE_VAL
-  #define Py_HUGE_VAL HUGE_VAL
-#endif
-#define __PYX_LIMITED_VERSION_HEX PY_VERSION_HEX
-#if defined(CYTHON_LIMITED_API)
-  #ifdef Py_LIMITED_API
-    #undef __PYX_LIMITED_VERSION_HEX
-    #define __PYX_LIMITED_VERSION_HEX Py_LIMITED_API
-    #if Py_LIMITED_API < 0x03090000
-      #error "Cython 3.3 requires the Python Limited API version to be 3.9 or greater."
-    #endif
-  #endif
-  #if defined(GRAALVM_PYTHON) || defined(PYPY_VERSION)
-    #ifdef _MSC_VER
-      #pragma message ("Py_LIMITED_API is defined on PyPy or GraalPy. This takes precedence over Cython's specialized\
-        code for PyPy and GraalPy and is unlikely to work.")
-    #else
-      #warning "Py_LIMITED_API is defined on PyPy or GraalPy. This takes precedence over Cython's specialized\
-        code for PyPy and GraalPy and is unlikely to work."
-    #endif
-  #endif
-  #define CYTHON_COMPILING_IN_PYPY 0
-  #define CYTHON_COMPILING_IN_CPYTHON 0
-  #define CYTHON_COMPILING_IN_LIMITED_API 1
-  #define CYTHON_COMPILING_IN_GRAAL 0
-  #define CYTHON_COMPILING_IN_CPYTHON_FREETHREADING 0
-  #undef CYTHON_USE_TYPE_SLOTS
-  #define CYTHON_USE_TYPE_SLOTS 0
-  #undef CYTHON_USE_TYPE_SPECS
-  #define CYTHON_USE_TYPE_SPECS 1
-  #undef CYTHON_USE_PYTYPE_LOOKUP
-  #define CYTHON_USE_PYTYPE_LOOKUP 0
-  #undef CYTHON_USE_PYLIST_INTERNALS
-  #define CYTHON_USE_PYLIST_INTERNALS 0
-  #undef CYTHON_USE_UNICODE_INTERNALS
-  #define CYTHON_USE_UNICODE_INTERNALS 0
-  #ifndef CYTHON_USE_UNICODE_WRITER
-    #define CYTHON_USE_UNICODE_WRITER 0
-  #endif
-  #undef CYTHON_USE_PYLONG_INTERNALS
-  #define CYTHON_USE_PYLONG_INTERNALS 0
-  #ifndef CYTHON_AVOID_BORROWED_REFS
-    #define CYTHON_AVOID_BORROWED_REFS 0
-  #endif
-  #ifndef CYTHON_AVOID_THREAD_UNSAFE_BORROWED_REFS
-    #define CYTHON_AVOID_THREAD_UNSAFE_BORROWED_REFS 0
-  #endif
-  #undef CYTHON_ASSUME_SAFE_MACROS
-  #define CYTHON_ASSUME_SAFE_MACROS 0
-  #undef CYTHON_ASSUME_SAFE_SIZE
-  #define CYTHON_ASSUME_SAFE_SIZE 0
-  #undef CYTHON_UNPACK_METHODS
-  #define CYTHON_UNPACK_METHODS 0
-  #undef CYTHON_FAST_THREAD_STATE
-  #define CYTHON_FAST_THREAD_STATE 0
-  #undef CYTHON_FAST_GIL
-  #define CYTHON_FAST_GIL 0
-  #undef CYTHON_VECTORCALL
-  #define CYTHON_VECTORCALL (__PYX_LIMITED_VERSION_HEX >= 0x030C0000)
-  #ifndef CYTHON_VECTORCALL_TPNEW
-    #define CYTHON_VECTORCALL_TPNEW (CYTHON_VECTORCALL && __PYX_LIMITED_VERSION_HEX >= 0x030E0000)
-  #endif
-  #ifndef CYTHON_PEP487_INIT_SUBCLASS
-    #define CYTHON_PEP487_INIT_SUBCLASS 1
-  #endif
-  #ifndef CYTHON_PEP489_MULTI_PHASE_INIT
-    #define CYTHON_PEP489_MULTI_PHASE_INIT 1
-  #endif
-  #ifndef CYTHON_USE_MODULE_STATE
-    #define CYTHON_USE_MODULE_STATE 0
-  #endif
-  #undef CYTHON_USE_SYS_MONITORING
-  #define CYTHON_USE_SYS_MONITORING 0
-  #ifndef CYTHON_USE_TP_FINALIZE
-    #define CYTHON_USE_TP_FINALIZE (__PYX_LIMITED_VERSION_HEX >= 0x030F0000 && PY_VERSION_HEX > 0x030F00A8)
-  #endif
-  #ifndef CYTHON_USE_AM_SEND
-    #define CYTHON_USE_AM_SEND (__PYX_LIMITED_VERSION_HEX >= 0x030A0000)
-  #endif
-  #undef CYTHON_USE_DICT_VERSIONS
-  #define CYTHON_USE_DICT_VERSIONS 0
-  #undef CYTHON_USE_EXC_INFO_STACK
-  #define CYTHON_USE_EXC_INFO_STACK 0
-  #ifndef CYTHON_UPDATE_DESCRIPTOR_DOC
-    #define CYTHON_UPDATE_DESCRIPTOR_DOC 0
-  #endif
-  #ifndef CYTHON_USE_OWN_PREP_RERAISE_STAR
-    #define CYTHON_USE_OWN_PREP_RERAISE_STAR 1
-  #endif
-  #ifndef CYTHON_USE_FREELISTS
-  #define CYTHON_USE_FREELISTS 1
-  #endif
-  #undef CYTHON_IMMORTAL_CONSTANTS
-  #define CYTHON_IMMORTAL_CONSTANTS 0
-  #if __PYX_LIMITED_VERSION_HEX < 0x030E0000
-  #undef CYTHON_OPAQUE_OBJECTS
-  #define CYTHON_OPAQUE_OBJECTS 0
-  #elif !defined(CYTHON_OPAQUE_OBJECTS)
-  #define CYTHON_OPAQUE_OBJECTS (__PYX_LIMITED_VERSION_HEX >= 0x030F0000)
-  #endif
-#elif defined(GRAALVM_PYTHON)
-  /* For very preliminary testing purposes. Most variables are set the same as PyPy.
-     The existence of this section does not imply that anything works or is even tested */
-  #define CYTHON_COMPILING_IN_PYPY 0
-  #define CYTHON_COMPILING_IN_CPYTHON 0
-  #define CYTHON_COMPILING_IN_LIMITED_API 0
-  #define CYTHON_COMPILING_IN_GRAAL 1
-  #define CYTHON_COMPILING_IN_CPYTHON_FREETHREADING 0
-  #ifndef CYTHON_USE_TYPE_SLOTS
-    #define CYTHON_USE_TYPE_SLOTS 0
-  #endif
-  #undef CYTHON_USE_TYPE_SPECS
-  #define CYTHON_USE_TYPE_SPECS 0
-  #undef CYTHON_USE_PYTYPE_LOOKUP
-  #define CYTHON_USE_PYTYPE_LOOKUP 0
-  #undef CYTHON_USE_PYLIST_INTERNALS
-  #define CYTHON_USE_PYLIST_INTERNALS 0
-  #undef CYTHON_USE_UNICODE_INTERNALS
-  #def
+Store fresh output under `Artifacts/`. A validation record must name the tested source/package, command, exit state, report path, and exact limits. A clean source scan or editor test is not packaged-device acceptance; a package-only smoke is not full feature acceptance. Never call the whole roadmap complete while any delivery gate in `Docs/MILESTONES.md` remains open.

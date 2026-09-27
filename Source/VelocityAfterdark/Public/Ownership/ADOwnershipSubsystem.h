@@ -131,6 +131,7 @@ public:
     // A snapshot is pending until a successful transaction; failed saves never advance the durable state.
     void StageWorldSnapshot(const FADWorldSnapshot& Snapshot);
     bool SaveWorldSnapshot(FString& OutError);
+    bool SetCustomWaypoint(bool bRecorded, FVector2D Position, FString& OutError);
     // Explicit absolute paths isolate test profiles. An empty path selects a memory-only profile.
     bool InitializeProfile(const FString& AbsoluteSavePath, FString& OutError);
 

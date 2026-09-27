@@ -6,6 +6,7 @@
   "countdownSeconds": 3,
   "timeoutSeconds": 450,
   "recoveryPenaltySeconds": 5,
+  "parSeconds": 277,
   "difficultySpeedScales": [
     0.8,
     0.95,
@@ -519,7 +520,7 @@
       }
     },
     {
-      "name": "Ansel Ward",
+      "name": "Ivo Renn",
       "color": [
         0.12,
         0.68,
@@ -527,7 +528,7 @@
       ],
       "speedScale": 0.97,
       "laneOffsetCm": -300,
-      "id": "ansel_ward",
+      "id": "ivo_renn",
       "personality": {
         "overtakeAggression": 0.64,
         "brakingConservatism": 0.48,

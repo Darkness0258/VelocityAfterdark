@@ -286,15 +286,55 @@ void AADHUD::DrawMap()
         DrawLine(UiOffsetX+A.X*UiScale,UiOffsetY+A.Y*UiScale,UiOffsetX+B.X*UiScale,UiOffsetY+B.Y*UiScale,Color,Width*UiScale);
     };
     for (const auto& Road:Exploration->GetRoadNetwork().GetSegments())
-        Line(ADMapLayout::Project(Road.Start),ADMapLayout::Project(Road.End),FLinearColor(.16f,.25f,.29f),7.f);
+        Line(Map->Project(Road.Start),Map->Project(Road.End),FLinearColor(.16f,.25f,.29f),7.f);
     const auto& Route=Exploration->GetRoute();
     for (int32 Index=1;Index<Route.Num();++Index)
-        Line(ADMapLayout::Project(Route[Index-1]),ADMapLayout::Project(Route[Index]),Accent,3.f);
+        Line(Map->Project(Route[Index-1]),Map->Project(Route[Index]),Accent,3.f);
+    const FVector2D CarWorld=PC->GetVehiclePawn() ? FVector2D(PC->GetVehiclePawn()->GetActorLocation()) : FVector2D::ZeroVector;
+    const auto& Snapshot=Ownership->GetProfile().World;
+    if (Snapshot.bCustomWaypointRecorded)
+    {
+        TArray<FVector2D> PersonalRoute;
+        double DistanceCm=0.; FString RouteError;
+        if (Exploration->GetRoadNetwork().BuildRoute(CarWorld,Snapshot.CustomWaypoint,PersonalRoute,DistanceCm,RouteError))
+            for (int32 Index=1;Index<PersonalRoute.Num();++Index)
+                Line(Map->Project(PersonalRoute[Index-1]),Map->Project(PersonalRoute[Index]),FLinearColor(.95f,.63f,.27f),2.f);
+        const FVector2D Pin=Map->Project(Snapshot.CustomWaypoint);
+        Line(Pin+FVector2D(-9,-9),Pin+FVector2D(9,9),FLinearColor(.98f,.68f,.29f),3.f);
+        Line(Pin+FVector2D(-9,9),Pin+FVector2D(9,-9),FLinearColor(.98f,.68f,.29f),3.f);
+        Label(TEXT("WAYPOINT"),Pin.X+11,Pin.Y-12,.54f,FLinearColor(.98f,.68f,.29f));
+    }
+
+    const auto* Career=GetWorld()->GetGameInstance()->GetSubsystem<UADCareerSubsystem>();
+    const auto* RaceManager=PC->GetRaceManager();
+    if (Career && Career->IsReady() && RaceManager)
+    {
+        for (int32 Index=0;Index<Career->GetChapters().Num();++Index)
+        {
+            const FADCareerChapter& Chapter=Career->GetChapters()[Index];
+            const FADRaceDefinition* Race=RaceManager->GetRaceById(Chapter.RaceId);
+            if (!Race || Race->Checkpoints.IsEmpty()) continue;
+            const FVector2D Pin=Map->Project(FVector2D(Race->Checkpoints[0].Location));
+            const bool bCurrent=Ownership->GetProfile().CompletedChapters.Num()==Index;
+            const FLinearColor Color=bCurrent ? Accent : FLinearColor(.77f,.82f,.84f);
+            Line(Pin+FVector2D(0,-9),Pin+FVector2D(8,7),Color,2.f);
+            Line(Pin+FVector2D(8,7),Pin+FVector2D(-8,7),Color,2.f);
+            Line(Pin+FVector2D(-8,7),Pin+FVector2D(0,-9),Color,2.f);
+            Label(FString::Printf(TEXT("R%d"),Index+1),Pin.X+9,Pin.Y-12,.5f,Color);
+        }
+    }
+    if (const auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>())
+    {
+        const FVector2D Pin=Map->Project(FVector2D(Mode->GetDrivingStartLocation()));
+        Panel(Pin.X-7,Pin.Y-7,14,14,FLinearColor(.92f,.55f,.28f));
+        Panel(Pin.X-3,Pin.Y-3,6,6,Black);
+        Label(TEXT("HOME GARAGE"),Pin.X+10,Pin.Y+3,.52f,FLinearColor(.98f,.67f,.39f));
+    }
     const auto* Selected=Map->GetSelectedLocation();
     for (const int32 Index:Map->GetVisibleLocations())
     {
         const auto& Location=Ownership->GetDiscoveries()[Index];
-        const FVector2D Point=ADMapLayout::Project(Location.Position);
+        const FVector2D Point=Map->Project(Location.Position);
         const bool bSelected=Selected && Selected->Id==Location.Id;
         const auto Color=Exploration->IsDiscovered(Location.Id) ? Accent : White;
         if (bSelected) Panel(Point.X-11,Point.Y-11,22,22,Accent);
@@ -304,7 +344,7 @@ void AADHUD::DrawMap()
     }
     if (const auto* Car=PC->GetVehiclePawn())
     {
-        const FVector2D Center=ADMapLayout::Project(FVector2D(Car->GetActorLocation()));
+        const FVector2D Center=Map->Project(FVector2D(Car->GetActorLocation()));
         const FVector Forward=Car->GetActorForwardVector();
         const FVector2D Direction(Forward.X,-Forward.Y),Right(-Direction.Y,Direction.X);
         const FVector2D Nose=Center+Direction*14.,Left=Center-Direction*9.-Right*7.,TailRight=Center-Direction*9.+Right*7.;
@@ -334,11 +374,16 @@ void AADHUD::DrawMap()
         if (Selected->Description.Len()>46 && FirstLine.FindLastChar(' ',Break))
         { FirstLine=Selected->Description.Left(Break); SecondLine=Selected->Description.Mid(Break+1); }
         Label(FirstLine,1320,801,.68f,White); Label(SecondLine.Left(52),1320,829,.68f,White);
-        Label(TEXT("ENTER / A  SET ROUTE"),1320,893,.8f,Accent);
+        Label(TEXT("ENTER / A  SET ROUTE"),1320,879,.72f,Accent);
+        Label(TEXT("T / Y  FAST TRAVEL  (DISCOVERED ONLY)"),1320,911,.61f,Muted);
     }
-    Label(TEXT("UP / DOWN  SELECT     LEFT / RIGHT  FILTER     CLICK A LANDMARK  SET ROUTE     BACKSPACE  FOLLOW NEAREST"),72,988,.70f,White);
+    if (Snapshot.bCustomWaypointRecorded) Label(TEXT("DELETE / RIGHT CLICK  CLEAR CUSTOM PIN"),1320,933,.55f,Muted);
+    if (!Map->GetMessage().IsEmpty()) Label(Map->GetMessage().Left(55),1320,933,.55f,Accent);
+    Label(FString::Printf(TEXT("MAP SCALE  %.1fX"),Map->GetZoomFactor()),74,152,.59f,Muted);
+    Label(TEXT("UP / DOWN  SELECT     LEFT / RIGHT  FILTER     CLICK LANDMARK  ROUTE     CLICK ROAD  PIN"),72,988,.66f,White);
     Label(TEXT("ESC / F5 / D-PAD LEFT  RETURN TO DRIVE"),72,1026,.70f,Accent);
-    Label(TEXT("ROADS     /     LANDMARKS     /     YOU"),1320,988,.66f,Muted);
+    Label(TEXT("I J K L  PAN   /   WHEEL  ZOOM"),1320,982,.58f,Muted);
+    Label(TEXT("RACE START   /   HOME GARAGE   /   CUSTOM PIN"),1320,1006,.55f,Muted);
 }
 
 void AADHUD::DrawSettings()
@@ -552,6 +597,9 @@ void AADHUD::DrawRace()
         Label(Player.bDNF ? TEXT("EVENT ENDED") : TEXT("FINISH"),540,309,2.1f,Accent);
         Label(Definition.Name.ToUpper(),540,373,1.0f,White);
         Label(Manager->IsClassificationFinal() ? TEXT("FINAL CLASSIFICATION") : TEXT("Waiting for remaining drivers..."),540,412,.75f,Muted);
+        const FString Grade(ANSI_TO_TCHAR(ADRaceRules::GradeName(Player.Grade)));
+        Label(FString::Printf(TEXT("PERFORMANCE GRADE  /  %s%s"),*Grade,
+            Manager->IsClassificationFinal() ? TEXT("") : TEXT("  /  PROVISIONAL")),540,439,.68f,Accent);
         Label(TEXT("DRIVER"),620,464,.7f,Muted);
         Label(TEXT("TOTAL TIME"),1030,464,.7f,Muted);
         Label(TEXT("PENALTY"),1230,464,.7f,Muted);

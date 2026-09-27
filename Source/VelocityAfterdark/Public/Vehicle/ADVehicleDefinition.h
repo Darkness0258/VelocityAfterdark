@@ -49,6 +49,7 @@ struct VELOCITYAFTERDARK_API FADVehicleDefinition
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float DownshiftRpm = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float ShiftTimeSeconds = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float WheelRadiusM = 0.f;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float WheelInertiaKgM2 = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TArray<FVector> WheelAnchorsCm;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) FVector CenterOfMassOffsetCm = FVector::ZeroVector;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float SuspensionRestLengthM = 0.f;

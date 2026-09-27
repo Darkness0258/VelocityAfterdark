@@ -6,6 +6,7 @@
   "countdownSeconds": 3,
   "timeoutSeconds": 360,
   "recoveryPenaltySeconds": 5,
+  "parSeconds": 245,
   "difficultySpeedScales": [
     0.8,
     0.95,
@@ -434,7 +435,7 @@
       }
     },
     {
-      "name": "Sana Finch",
+      "name": "Sel Arden",
       "color": [
         0.12,
         0.68,
@@ -442,7 +443,7 @@
       ],
       "speedScale": 0.97,
       "laneOffsetCm": -300,
-      "id": "sana_finch",
+      "id": "sel_arden",
       "personality": {
         "overtakeAggression": 0.38,
         "brakingConservatism": 0.72,

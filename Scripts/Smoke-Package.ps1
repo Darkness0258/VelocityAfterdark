@@ -32,7 +32,8 @@ while (-not $runtimeProcess.WaitForExit(1000)) {
     }
 }
 if ($runtimeProcess.ExitCode -ne 0) { throw "Packaged runtime exited with $($runtimeProcess.ExitCode). Inspect $logFile" }
-foreach ($marker in @('Dockside ready:','AFTERDARK_PARKED_ART_READY: 3 static cars','Loaded Aster S6,','Rain streak emitter active:','AFTERDARK_CUTSCENE_SMOKE_COMPLETE','AFTERDARK_RENDER_SMOKE_COMPLETE')) {
+foreach ($marker in @('Dockside ready:','AFTERDARK_PARKED_ART_READY: 3 static cars','Loaded Aster S6,','Rain streak emitter active:',
+        'AFTERDARK_GARAGE_SMOKE_COMPLETE','AFTERDARK_CUTSCENE_SMOKE_COMPLETE','AFTERDARK_RENDER_SMOKE_COMPLETE')) {
     if (-not (Select-String -LiteralPath $logFile -SimpleMatch $marker -Quiet)) { throw "Runtime marker missing: $marker" }
 }
 if (Select-String -LiteralPath $logFile -Pattern 'Fatal error:|LogADVehiclePhysics: Error:|Dockside load failed' -Quiet) {
@@ -49,7 +50,7 @@ foreach ($candidate in $savedCandidates) {
     }
 }
 if (-not $captureRoot) { throw 'Packaged startup finished but fresh camera captures were not found.' }
-foreach ($camera in @('Title','Chase','Hood','Cockpit','Arrival01','Arrival02','Arrival03','Arrival04')) {
+foreach ($camera in @('Title','Chase','Hood','Cockpit','Garage','Arrival01','Arrival02','Arrival03','Arrival04')) {
     $capture = Join-Path $captureRoot "Smoke\Afterdark$camera.png"
     if (-not (Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).LastWriteTime -lt $started) {
         throw "Fresh packaged $camera capture missing."
@@ -61,4 +62,4 @@ $captureCsv = Get-ChildItem -LiteralPath $csvDirectory -Filter '*.csv' |
     Where-Object LastWriteTime -ge $started | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $captureCsv) { throw 'Packaged smoke did not produce a fresh profiling CSV; previous captures are not evidence for this run.' }
 Copy-Item -LiteralPath $captureCsv.FullName -Destination (Join-Path $outputDirectory 'frames.csv') -Force
-Write-Host "AFTERDARK_PACKAGE_SMOKE_OK: cooked data, runtime, four driving views, four moving cutscene shots and clean exit. Inspect $outputDirectory"
+Write-Host "AFTERDARK_PACKAGE_SMOKE_OK: cooked data, runtime, four driving views, garage studio, four animated cutscene shots and clean exit. Inspect $outputDirectory"

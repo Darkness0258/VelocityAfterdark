@@ -62,9 +62,12 @@ public:
     FVector GetWheelLocalPosition(int32 WheelIndex) const;
     float GetWheelSpinDegrees(int32 WheelIndex) const;
     float GetSteeringDegrees() const { return SteeringDegrees; }
+#if WITH_DEV_AUTOMATION_TESTS
+    void SeedWheelSpeedsFromChassisForAutomation();
+#endif
 
     UPROPERTY(EditDefaultsOnly, Category="Vehicle") FString VehicleDefinitionFile = TEXT("Data/Vehicles/aster_s6.json");
-    // Demand-limited ABS/TCS and yaw-rate ESC; wheel angular inertia is not modeled.
+    // Slip-aware wheel inertia, demand-limited ABS/TCS and yaw-rate ESC.
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Assists") bool bTractionControl = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Assists") bool bAntiLockBrakes = true;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Assists") bool bStabilityControl = true;
@@ -74,6 +77,7 @@ private:
     {
         float SuspensionLengthM = 0.f;
         float SpinDegrees = 0.f;
+        float AngularSpeedRadPerSecond = 0.f;
     };
 
     UPROPERTY(Transient) TObjectPtr<UPrimitiveComponent> Chassis;
@@ -98,6 +102,7 @@ private:
 
     float GetGearRatio() const;
     float GetForwardSpeedMps() const;
+    float GetDrivenWheelSurfaceSpeedMps() const;
     void ChangeGear(int32 NewGear);
     void UpdateTransmission(float DeltaTime, float ForwardSpeedMps);
     float GetDriveShare(int32 WheelIndex) const;

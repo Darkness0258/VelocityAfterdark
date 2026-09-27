@@ -280,6 +280,18 @@ bool AADPlayerController::InputKey(const FInputKeyEventArgs& Params)
             CapturedKeysAwaitingRelease.Remove(Params.Key);
         return true;
     }
+    if (MapComponent && MapComponent->IsOpen() && (Params.Event==IE_Pressed || Params.Event==IE_Repeat))
+    {
+        const FKey Key=Params.Key;
+        if (Key==EKeys::T) { MapComponent->FastTravel(); return true; }
+        if (Key==EKeys::Delete || Key==EKeys::RightMouseButton) { MapComponent->ClearWaypoint(); return true; }
+        if (Key==EKeys::MouseScrollUp) { MapComponent->Zoom(.12f); return true; }
+        if (Key==EKeys::MouseScrollDown) { MapComponent->Zoom(-.12f); return true; }
+        if (Key==EKeys::I) { MapComponent->Pan(FVector2D(0.,8000.)); return true; }
+        if (Key==EKeys::K) { MapComponent->Pan(FVector2D(0.,-8000.)); return true; }
+        if (Key==EKeys::J) { MapComponent->Pan(FVector2D(-8000.,0.)); return true; }
+        if (Key==EKeys::L) { MapComponent->Pan(FVector2D(8000.,0.)); return true; }
+    }
     auto* Settings=GetGameInstance() ? GetGameInstance()->GetSubsystem<UADSettingsSubsystem>() : nullptr;
     if (!Settings || !Settings->IsOpen())
     {
@@ -386,7 +398,7 @@ void AADPlayerController::SettingsInput()
     }
 }
 void AADPlayerController::MapInput() { MapComponent->Toggle(); }
-void AADPlayerController::CameraInput() { if (bSessionPaused) { SettingsInput(); return; } if (MapComponent->IsOpen() || AreSettingsOpen()) return; if (Cinematic->IsActive()) { if (Cinematic->GetMode()!=EADCinematicMode::Story) Cinematic->CycleCamera(); return; } if (AADVehiclePawn* Car=GetVehiclePawn(); Car && bSessionStarted && !GarageSession->IsActive()) { Car->CycleCamera(); } }
+void AADPlayerController::CameraInput() { if (bSessionPaused) { SettingsInput(); return; } if (MapComponent->IsOpen()) { MapComponent->FastTravel(); return; } if (AreSettingsOpen()) return; if (Cinematic->IsActive()) { if (Cinematic->GetMode()!=EADCinematicMode::Story) Cinematic->CycleCamera(); return; } if (AADVehiclePawn* Car=GetVehiclePawn(); Car && bSessionStarted && !GarageSession->IsActive()) { Car->CycleCamera(); } }
 void AADPlayerController::PhotoInput() { if (MapComponent->IsOpen() || AreSettingsOpen()) return; if (Cinematic->IsActive()) Cinematic->Leave(); else Cinematic->EnterPhoto(); }
 void AADPlayerController::ReplayInput() { if (MapComponent->IsOpen() || AreSettingsOpen()) return; if (Cinematic->IsActive()) Cinematic->Leave(); else Cinematic->EnterReplay(); }
 void AADPlayerController::CaptureInput() { Cinematic->Capture(); }
@@ -477,10 +489,11 @@ void AADPlayerController::DifficultyInput()
     SelectedDifficulty=(SelectedDifficulty+1)%3;
 }
 
-void AADPlayerController::RaceStateChanged(EADRaceState)
+void AADPlayerController::RaceStateChanged(EADRaceState NewState)
 {
     FlushPressedKeys();
     Cinematic->NotifyRecordingDiscontinuity();
+    if (NewState==EADRaceState::Countdown) Cinematic->ClearResultMetadata();
 }
 void AADPlayerController::TransmissionInput() { if (MapComponent->IsOpen() || GarageSession->IsActive() || AreSettingsOpen()) { GarageUp(); return; } DrivingAction(0); }
 void AADPlayerController::ShiftUpInput() { if (MapComponent->IsOpen() || GarageSession->IsActive() || AreSettingsOpen()) { GarageNext(); return; } DrivingAction(1); }

@@ -4,8 +4,9 @@
   "name": "Nova Outer Loop Sprint",
   "laps": 0,
   "countdownSeconds": 3,
-  "timeoutSeconds": 240,
+  "timeoutSeconds": 420,
   "recoveryPenaltySeconds": 5,
+  "parSeconds": 374,
   "routePoints": [
     [-70950, -25000, 95],
     [-40500, -25000, 40],

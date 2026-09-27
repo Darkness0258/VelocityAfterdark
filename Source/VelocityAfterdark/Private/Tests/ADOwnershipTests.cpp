@@ -158,4 +158,25 @@ bool FADWorldProgressTest::RunTest(const FString&)
     TestTrue(TEXT("Failed discovery remains discoverable"),F.Service->GetProfile().DiscoveredLocations.IsEmpty());
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADMapWaypointPersistenceTest,"Afterdark.Ownership.MapWaypointPersistence",
+    EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
+bool FADMapWaypointPersistenceTest::RunTest(const FString&)
+{
+    FProfileFixture F; FString Error;
+    if (!TestTrue(TEXT("Initialize isolated map profile"),F.Service->InitializeProfile(F.Path,Error))) return false;
+    const FVector2D Waypoint(-82000.,25000.);
+    TestTrue(TEXT("Save a snapped road waypoint"),F.Service->SetCustomWaypoint(true,Waypoint,Error));
+    TestTrue(TEXT("Saved waypoint is present in the snapshot"),F.Service->GetProfile().World.bCustomWaypointRecorded);
+    TestTrue(TEXT("Waypoint coordinates round-trip before reload"),F.Service->GetProfile().World.CustomWaypoint.Equals(Waypoint,.001));
+    TestTrue(TEXT("Load schema seven map snapshot"),F.Service->InitializeProfile(F.Path,Error));
+    TestTrue(TEXT("Waypoint survives profile reload"),F.Service->GetProfile().World.bCustomWaypointRecorded);
+    TestTrue(TEXT("Reloaded waypoint coordinates match"),F.Service->GetProfile().World.CustomWaypoint.Equals(Waypoint,.001));
+    TestFalse(TEXT("Out-of-bounds waypoint rejected"),F.Service->SetCustomWaypoint(true,FVector2D(300000.,0.),Error));
+    TestTrue(TEXT("Invalid change preserves saved waypoint"),F.Service->GetProfile().World.CustomWaypoint.Equals(Waypoint,.001));
+    TestTrue(TEXT("Clear custom pin"),F.Service->SetCustomWaypoint(false,FVector2D::ZeroVector,Error));
+    TestTrue(TEXT("Clear is persisted"),F.Service->InitializeProfile(F.Path,Error));
+    TestFalse(TEXT("Cleared waypoint stays cleared after reload"),F.Service->GetProfile().World.bCustomWaypointRecorded);
+    return true;
+}
 #endif

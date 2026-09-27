@@ -94,5 +94,6 @@ private:
     bool bNeedsRecovery = false;
     bool bWasAvoiding = false;
     bool bUnderPressure = false;
+    bool bFollowingStoppedVehicle = false;
     bool bEmergencyYield = false;
 };

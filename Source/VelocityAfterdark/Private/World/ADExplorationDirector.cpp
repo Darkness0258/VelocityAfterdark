@@ -8,7 +8,9 @@
 #include "Player/ADVehiclePawn.h"
 #include "Racing/ADRaceManager.h"
 #include "Vehicle/ADVehiclePhysicsComponent.h"
+#include "Vehicle/ADVehicleEffectsComponent.h"
 #include "World/ADPoliceDirector.h"
+#include "CollisionShape.h"
 
 AADExplorationDirector::AADExplorationDirector()
 {
@@ -58,6 +60,78 @@ void AADExplorationDirector::TrackDiscovery(const FString& Id)
 
 void AADExplorationDirector::ClearTrackedDiscovery()
 { TrackedId.Reset(); bManualTarget=false; Route.Reset(); RouteError.Reset(); RouteDistanceCm=0.; ResetArrival(); }
+
+bool AADExplorationDirector::FastTravelToDiscovery(AADVehiclePawn* Car,const FString& LocationId,FString& OutError)
+{
+    OutError.Reset();
+    if (!bReady || GetNetMode()!=NM_Standalone || !Ownership.IsValid() || !Ownership->IsReady()
+        || !IsValid(Car) || !Car->GetPhysics() || !Car->GetPhysics()->IsReady())
+    { OutError=TEXT("Fast travel is unavailable right now."); return false; }
+    const auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>();
+    if (!Mode || Car->IsInGarage() || !Car->IsDrivingEnabled()
+        || (Mode->GetRaceManager() && Mode->GetRaceManager()->GetState()!=EADRaceState::Idle)
+        || (Mode->GetPoliceDirector() && Mode->GetPoliceDirector()->IsActive()))
+    { OutError=TEXT("Fast travel is restricted to an active free drive outside a pursuit."); return false; }
+    const auto* Location=Ownership->GetDiscoveries().FindByPredicate(
+        [&LocationId](const FADDiscoveryDefinition& Item) { return Item.Id==LocationId; });
+    if (!Location || !IsDiscovered(LocationId))
+    { OutError=TEXT("Fast travel unlocks after you discover that landmark."); return false; }
+
+    TArray<FVector2D> RoutePoints;
+    double DistanceCm=0.;
+    if (!RoadNetwork.BuildRoute(FVector2D(Car->GetActorLocation()),Location->Position,
+        RoutePoints,DistanceCm,OutError) || RoutePoints.IsEmpty())
+    { OutError=TEXT("No safe road route reaches this landmark."); return false; }
+
+    const FVector2D RoadPoint=RoutePoints.Last();
+    FVector2D Direction=RoutePoints.Num()>1 ? (RoadPoint-RoutePoints[RoutePoints.Num()-2]).GetSafeNormal() : FVector2D::ZeroVector;
+    if (Direction.IsNearlyZero())
+    {
+        double ClosestSquared=TNumericLimits<double>::Max();
+        for (const FADRoadNetworkSegment& Segment:RoadNetwork.GetSegments())
+        {
+            const FVector2D Delta=Segment.End-Segment.Start;
+            const double LengthSquared=Delta.SizeSquared();
+            const double Alpha=LengthSquared>UE_SMALL_NUMBER
+                ? FMath::Clamp(FVector2D::DotProduct(Location->Position-Segment.Start,Delta)/LengthSquared,0.,1.) : 0.;
+            const FVector2D Projection=Segment.Start+Delta*Alpha;
+            const double ErrorSquared=FVector2D::DistSquared(Location->Position,Projection);
+            if (ErrorSquared<ClosestSquared) { ClosestSquared=ErrorSquared; Direction=Delta.GetSafeNormal(); }
+        }
+    }
+    if (Direction.IsNearlyZero()) { OutError=TEXT("The landmark has no valid road orientation."); return false; }
+
+    const FVector2D Right(-Direction.Y,Direction.X);
+    const FRotator Rotation(FVector(Direction.X,Direction.Y,0.).Rotation());
+    const FCollisionQueryParams Query(SCENE_QUERY_STAT(ADFastTravel),false,Car);
+    const FCollisionShape Shape=FCollisionShape::MakeBox(FVector(270.,115.,40.));
+    FTransform SafePose;
+    bool bFoundSafePose=false;
+    for (const double Offset:{500.,-500.,0.})
+    {
+        const FVector Position(RoadPoint.X+Right.X*Offset,RoadPoint.Y+Right.Y*Offset,90.);
+        if (!GetWorld()->OverlapBlockingTestByChannel(Position,Rotation.Quaternion(),ECC_PhysicsBody,Shape,Query))
+        { SafePose=FTransform(Rotation,Position); bFoundSafePose=true; break; }
+    }
+    if (!bFoundSafePose) { OutError=TEXT("That landmark is busy. Try fast travel again when its road is clear."); return false; }
+
+    if (!Car->PlaceForRace(SafePose)) { OutError=TEXT("The vehicle could not be placed safely at the landmark."); return false; }
+    Car->GetPhysics()->SetControls(0.f,0.f,0.f,false);
+    if (Car->GetEffects()) Car->GetEffects()->SetNitrousHeld(false);
+    ResetAfterTeleport(Car);
+    return true;
+}
+
+void AADExplorationDirector::ResetAfterTeleport(AADVehiclePawn* Car)
+{
+    Player=Car;
+    PreviousPosition=Car ? FVector2D(Car->GetActorLocation()) : FVector2D::ZeroVector;
+    LastSampleSeconds=GetWorld() ? GetWorld()->GetTimeSeconds() : -1.;
+    ResetArrival();
+    TrackedId.Reset();
+    bManualTarget=false;
+    Route.Reset(); RouteError.Reset(); RouteDistanceCm=0.; RouteElapsed=1.f;
+}
 
 void AADExplorationDirector::ResetArrival()
 { ArrivalId.Reset(); ArrivalSeconds=0.f; }

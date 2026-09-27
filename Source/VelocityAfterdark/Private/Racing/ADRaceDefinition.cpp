@@ -178,7 +178,8 @@ bool FADRaceDefinition::LoadFromJson(const FString& Path, FString& Error)
         || !RaceJsonNumber(Root, TEXT("laps"), LapsValue, 0, 99, Error)
         || !RaceJsonNumber(Root, TEXT("countdownSeconds"), Candidate.CountdownSeconds, 1, 10, Error)
         || !RaceJsonNumber(Root, TEXT("timeoutSeconds"), Candidate.TimeoutSeconds, 60, 7200, Error)
-        || !RaceJsonNumber(Root, TEXT("recoveryPenaltySeconds"), Candidate.RecoveryPenaltySeconds, 1, 60, Error)) return false;
+        || !RaceJsonNumber(Root, TEXT("recoveryPenaltySeconds"), Candidate.RecoveryPenaltySeconds, 1, 60, Error)
+        || !RaceJsonNumber(Root, TEXT("parSeconds"), Candidate.ParSeconds, 30, 7200, Error)) return false;
     if (LapsValue != FMath::FloorToDouble(LapsValue)) { Error = TEXT("laps must be an integer."); return false; }
     Candidate.Laps = static_cast<int32>(LapsValue);
 

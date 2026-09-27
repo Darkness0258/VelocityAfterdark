@@ -206,6 +206,18 @@ void FrameRateIndependentTiming()
         Check(State.NextCheckpoint == 2, "high-speed run also crossed required next gate once");
     }
 }
+
+void PostRaceGrades()
+{
+    Check(CalculateGrade(94,100,1,0,true)==Grade::SSS,"clean sub-par race win earns the top presentation grade");
+    Check(CalculateGrade(96,100,1,0,true)==Grade::SS,"the top grade requires a clearly faster clean win");
+    Check(CalculateGrade(90,100,1,1,true)!=Grade::SSS,"a recovery blocks SSS");
+    Check(CalculateGrade(90,100,2,0,true)!=Grade::SSS,"a non-winning finish blocks SSS");
+    Check(CalculateGrade(150,100,4,2,true)==Grade::D,"slow, recovered fourth place receives the lowest grade");
+    Check(CalculateGrade(0,100,1,0,true)==Grade::D,"invalid finish time is rejected");
+    Check(CalculateGrade(90,std::numeric_limits<double>::infinity(),1,0,true)==Grade::D,"invalid par is rejected");
+    Check(CalculateGrade(90,100,1,0,false)==Grade::D,"DNF cannot receive a competitive grade");
+}
 }
 
 int main()
@@ -216,6 +228,7 @@ int main()
     InvalidSamplesAndRecovery();
     RecoveryInvalidatesBestLap();
     FrameRateIndependentTiming();
+    PostRaceGrades();
     std::cout << Checks << " race rule checks; " << Failures << " failures.\n";
     return Failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

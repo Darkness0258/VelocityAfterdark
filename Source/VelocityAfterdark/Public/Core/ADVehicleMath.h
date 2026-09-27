@@ -126,6 +126,68 @@ inline double SlipAngleRadians(double ForwardSpeedMps, double LateralSpeedMps)
     return std::atan2(Finite(LateralSpeedMps), std::fmax(std::abs(Finite(ForwardSpeedMps)), 2.0));
 }
 
+inline double SlipRatio(double WheelSurfaceSpeedMps, double GroundSpeedMps)
+{
+    WheelSurfaceSpeedMps = Finite(WheelSurfaceSpeedMps);
+    GroundSpeedMps = Finite(GroundSpeedMps);
+    const double Denominator = std::fmax(2.0,
+        std::fmax(std::abs(WheelSurfaceSpeedMps), std::abs(GroundSpeedMps)));
+    return Clamp((WheelSurfaceSpeedMps - GroundSpeedMps) / Denominator, -3.0, 3.0);
+}
+
+inline double LongitudinalTireForceN(double Slip, double CapacityN, double Stiffness = 8.0)
+{
+    return Clamp(CapacityN, 0.0, 1000000.0)
+        * std::tanh(Clamp(Slip, -3.0, 3.0) * Clamp(Stiffness, 0.1, 40.0));
+}
+
+struct WheelTireStep
+{
+    double AngularSpeedRadPerSecond;
+    double LongitudinalForceN;
+};
+
+// Implicit wheel/tire coupling stays stable at low speed and at 30 Hz even when
+// a wheel is locked or spinning. The tire's monotone slip curve makes this
+// bounded bisection cheap and deterministic, without frame-dependent impulses.
+inline WheelTireStep SolveWheelTireStep(double AngularSpeedRadPerSecond, double GroundSpeedMps,
+    double DriveTorqueNm, double BrakeTorqueNm, double LongitudinalCapacityN,
+    double WheelRadiusM, double WheelInertiaKgM2, double Dt, double SlipStiffness = 8.0)
+{
+    AngularSpeedRadPerSecond = Finite(AngularSpeedRadPerSecond);
+    GroundSpeedMps = Finite(GroundSpeedMps);
+    DriveTorqueNm = Finite(DriveTorqueNm);
+    BrakeTorqueNm = Clamp(BrakeTorqueNm, 0.0, 1000000.0);
+    LongitudinalCapacityN = Clamp(LongitudinalCapacityN, 0.0, 1000000.0);
+    WheelRadiusM = Clamp(WheelRadiusM, 0.1, 2.0);
+    WheelInertiaKgM2 = Clamp(WheelInertiaKgM2, 0.05, 20.0);
+    Dt = Clamp(Dt, 0.001, 0.1);
+
+    const double BrakeReference = std::abs(AngularSpeedRadPerSecond) > 0.5
+        ? AngularSpeedRadPerSecond : (std::abs(GroundSpeedMps) > 0.5 ? GroundSpeedMps : DriveTorqueNm);
+    const double AppliedBrakeTorque = Sign(BrakeReference) * BrakeTorqueNm;
+    const double NetDrivelineTorque = DriveTorqueNm - AppliedBrakeTorque;
+    const double FreeAngularSpeed = AngularSpeedRadPerSecond + NetDrivelineTorque * Dt / WheelInertiaKgM2;
+    const double TireAngularDelta = LongitudinalCapacityN * WheelRadiusM * Dt / WheelInertiaKgM2;
+    double Low = FreeAngularSpeed - TireAngularDelta;
+    double High = FreeAngularSpeed + TireAngularDelta;
+
+    for (int Iteration = 0; Iteration < 18; ++Iteration)
+    {
+        const double Candidate = (Low + High) * 0.5;
+        const double Slip = SlipRatio(Candidate * WheelRadiusM, GroundSpeedMps);
+        const double TireForce = LongitudinalTireForceN(Slip, LongitudinalCapacityN, SlipStiffness);
+        const double Residual = Candidate - AngularSpeedRadPerSecond
+            - (NetDrivelineTorque - TireForce * WheelRadiusM) * Dt / WheelInertiaKgM2;
+        if (Residual > 0.0) High = Candidate;
+        else Low = Candidate;
+    }
+
+    const double ResultSpeed = (Low + High) * 0.5;
+    const double ResultSlip = SlipRatio(ResultSpeed * WheelRadiusM, GroundSpeedMps);
+    return {ResultSpeed, LongitudinalTireForceN(ResultSlip, LongitudinalCapacityN, SlipStiffness)};
+}
+
 inline double SteeringLimitDegrees(double SpeedMps, double LowSpeedDegrees,
     double HighSpeedDegrees, double FalloffMps)
 {

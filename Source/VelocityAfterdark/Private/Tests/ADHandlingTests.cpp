@@ -17,13 +17,13 @@
 
 namespace ADHandlingTests
 {
-    enum class EScenario : uint8 { HighSpeed, Steering, Barrier, Curb };
+    enum class EScenario : uint8 { HighSpeed, Steering, Barrier, Curb, Wheelspin, TractionControl };
 
     /**
-     * These are bounded fixtures, not a claimed lap or natural acceleration run.
-     * Each fixture settles the real chassis, then seeds velocity exactly once to
-     * isolate the requested handling condition. Subsequent translation, rotation,
-     * suspension, braking and collision response all come from the runtime model.
+     * These are bounded fixtures, not a claimed lap. Each settles the real chassis,
+     * then either seeds a measured speed or performs a real-from-rest power launch.
+     * Translation, rotation, suspension, tire slip, braking and collision response
+     * after setup all come from the runtime model.
      */
     class FScenarioCommand final : public IAutomationLatentCommand
     {
@@ -85,6 +85,7 @@ namespace ADHandlingTests
                 MinimumHeightCm = FMath::Min(MinimumHeightCm, Position.Z);
                 MinimumUpDot = FMath::Min(MinimumUpDot, Vehicle->GetActorUpVector().Z);
                 PeakAngularSpeed = FMath::Max(PeakAngularSpeed, AngularVelocity.Size());
+                PeakWheelSlip = FMath::Max(PeakWheelSlip,Vehicle->GetPhysics()->GetTelemetry().Slip);
                 MinimumForwardSpeedCm = FMath::Min(MinimumForwardSpeedCm, Velocity.X);
                 PeakSpeedKmh = FMath::Max(PeakSpeedKmh, Velocity.Size() * .036);
                 if (Vehicle->GetPhysics()->GetTelemetry().GroundedWheels < 4) ++PartialContactFrames;
@@ -111,6 +112,8 @@ namespace ADHandlingTests
             case EScenario::Steering: return UpdateSteering(World, Elapsed);
             case EScenario::Barrier: return UpdateBarrier(World, Elapsed);
             case EScenario::Curb: return UpdateCurb(World, Elapsed);
+            case EScenario::Wheelspin: return UpdateWheelspin(World,Elapsed,false);
+            case EScenario::TractionControl: return UpdateWheelspin(World,Elapsed,true);
             default: return Fail(TEXT("Unknown handling fixture."));
             }
         }
@@ -119,15 +122,20 @@ namespace ADHandlingTests
         bool CreateFixture(UWorld* World)
         {
             const bool bFast = Scenario == EScenario::HighSpeed || Scenario == EScenario::Barrier;
+            const bool bLaunchFixture=Scenario==EScenario::Wheelspin || Scenario==EScenario::TractionControl;
             Origin = FVector(Scenario == EScenario::HighSpeed ? -25000. : -15000., 400.,
                 Vehicle->GetActorLocation().Z);
-            SeedSpeedCm = (bFast ? 200. : 60.) / .036;
+            SeedSpeedCm=bLaunchFixture ? 0. : (bFast ? 200. : 60.)/.036;
             Vehicle->GetPhysics()->ResetState();
             Chassis->SetPhysicsLinearVelocity(FVector::ZeroVector);
             Chassis->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
             Vehicle->SetActorLocationAndRotation(Origin, FRotator::ZeroRotator, false, nullptr,
                 ETeleportType::TeleportPhysics);
-            Chassis->SetPhysicsLinearVelocity(FVector(SeedSpeedCm, 0., 0.));
+            if (!bLaunchFixture)
+            {
+                Chassis->SetPhysicsLinearVelocity(FVector(SeedSpeedCm, 0., 0.));
+                Vehicle->GetPhysics()->SeedWheelSpeedsFromChassisForAutomation();
+            }
             Chassis->WakeAllRigidBodies();
             Test->TestTrue(TEXT("Initialized speed fixture matches its requested velocity"),
                 FMath::Abs(Chassis->GetPhysicsLinearVelocity().X - SeedSpeedCm) < 1.);
@@ -163,7 +171,8 @@ namespace ADHandlingTests
                     Test->TestTrue(TEXT("Production chassis enables continuous collision detection"),
                         Chassis->BodyInstance.bUseCCD);
             }
-            Vehicle->GetPhysics()->SetControls(Scenario == EScenario::Curb ? .25f : 0.f,
+            Vehicle->GetPhysics()->bTractionControl=Scenario!=EScenario::Wheelspin;
+            Vehicle->GetPhysics()->SetControls(Scenario==EScenario::Curb ? .25f : (bLaunchFixture ? 1.f : 0.f),
                 0.f, Scenario == EScenario::Steering ? .25f : 0.f, false);
             return true;
         }
@@ -261,6 +270,24 @@ namespace ADHandlingTests
             return false;
         }
 
+        bool UpdateWheelspin(UWorld* World,float Elapsed,bool bAssistEnabled)
+        {
+            if (Elapsed<1.5f) return false;
+            const double SpeedKmh=Chassis->GetPhysicsLinearVelocity().Size()*.036;
+            Test->AddInfo(FString::Printf(TEXT("%s %d Hz: launch speed=%.2f km/h, peak tire slip=%.3f, position=%.2f m"),
+                bAssistEnabled ? TEXT("TractionControl") : TEXT("Wheelspin"),Rate,SpeedKmh,PeakWheelSlip,
+                (Vehicle->GetActorLocation().X-Origin.X)*.01));
+            Test->TestEqual(TEXT("Launch remains supported by four physical tire contacts"),
+                Vehicle->GetPhysics()->GetTelemetry().GroundedWheels,4);
+            Test->TestTrue(TEXT("A full-throttle launch produces forward acceleration"),SpeedKmh>8.);
+            if (bAssistEnabled)
+                Test->TestTrue(TEXT("Traction control keeps slip below an uncontrolled wheelspin launch"),PeakWheelSlip<.85);
+            else
+                Test->TestTrue(TEXT("Assist-off excess torque creates actual driven-wheel slip"),PeakWheelSlip>.85);
+            BeginRecovery(World);
+            return false;
+        }
+
         void BeginRecovery(UWorld* World)
         {
             DestroyObstacle();
@@ -353,6 +380,7 @@ namespace ADHandlingTests
         double MinimumHeightCm = 0.;
         double MinimumUpDot = 1.;
         double PeakAngularSpeed = 0.;
+        double PeakWheelSlip=0.;
         double MinimumForwardSpeedCm = 0.;
         double PeakSpeedKmh = 0.;
         double BrakeStartSpeedKmh = 0.;
@@ -369,7 +397,8 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FADHandlingRegressionTest, "Afterdark.Runtime.
 
 void FADHandlingRegressionTest::GetTests(TArray<FString>& OutNames, TArray<FString>& OutCommands) const
 {
-    for (const TCHAR* Scenario : {TEXT("HighSpeed"), TEXT("Steering"), TEXT("Barrier"), TEXT("Curb")})
+    for (const TCHAR* Scenario : {TEXT("HighSpeed"), TEXT("Steering"), TEXT("Barrier"), TEXT("Curb"),
+        TEXT("Wheelspin"),TEXT("TractionControl")})
     {
         for (int32 Rate : {30, 60, 120})
         {
@@ -399,6 +428,8 @@ bool FADHandlingRegressionTest::RunTest(const FString& Parameters)
     else if (ScenarioName == TEXT("Steering")) Scenario = EScenario::Steering;
     else if (ScenarioName == TEXT("Barrier")) Scenario = EScenario::Barrier;
     else if (ScenarioName == TEXT("Curb")) Scenario = EScenario::Curb;
+    else if (ScenarioName == TEXT("Wheelspin")) Scenario=EScenario::Wheelspin;
+    else if (ScenarioName == TEXT("TractionControl")) Scenario=EScenario::TractionControl;
     else { AddError(TEXT("Unknown handling fixture name.")); return false; }
 
     if (!FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Velocity/Maps/L_Dockside.umap")))

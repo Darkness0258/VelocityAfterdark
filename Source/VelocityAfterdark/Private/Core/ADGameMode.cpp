@@ -174,6 +174,9 @@ FVector2D AADGameMode::GetDriveBounds() const
     return District ? District->GetGroundHalfExtent() : FVector2D(48000,34000);
 }
 
+FVector AADGameMode::GetDrivingStartLocation() const
+{ return DrivingStart ? DrivingStart->GetActorLocation() : FVector::ZeroVector; }
+
 void AADGameMode::RaceStateChanged(EADRaceState State)
 {
     const bool bFreeDrive=State==EADRaceState::Idle;

@@ -1,10 +1,10 @@
 # Advanced features — design notes
 
-> **Current status audited 2026-09-26:** The notes below began as implementation proposals. Their old "never built" statements and sequencing are historical, not the current source status. The current package/test evidence is recorded in `VALIDATION.md` and the remaining production gates in `IMPLEMENTATION_QUEUE.md`.
+> **Current status audited 2026-09-27:** These notes began as implementation proposals. The table below describes source behavior and its test boundary; passing source tests do not mean every production gate is closed. The latest matching package/test evidence is in `VALIDATION.md`, with open roadmap work in `IMPLEMENTATION_QUEUE.md`.
 
 | Feature | Current status | Verification boundary |
 |---|---|---|
-| Rival memory | Bounded profile records, race-result updates, and rival-specific briefing/victory text are implemented. | Persistence and story plumbing exist; the current suite has no isolated test asserting rival memory round-trip and dialogue changes. |
+| Rival memory | Bounded profile records, race-result updates, and rival-specific briefing/victory text are implemented. | Career route automation checks Ivo/Sel context changes; no focused profile save/reload test yet isolates rival-memory round-trip. |
 | AI driver personalities | Data-defined overtaking, braking and pressure-mistake weights are implemented and applied to driving decisions. | Catalog validation and full physical races pass; no A/B test asserts that each weight produces a measured behavior difference. |
 | Police PIT / roadblocks | Not implemented. Coordinated PIT, roadblocks, spike strips and helicopter support remain open. | Current living-world tests cover pursuit/search integration, not these tactics. |
 | Sprint / point-to-point | Implemented as zero-lap races with ordered directed gates and an endpoint finish. | Portable rules, race catalog validation and a full physical regional sprint pass. |
@@ -17,11 +17,11 @@ Each feature extends an existing subsystem rather than adding a separate archite
 
 ## 1. Rival memory
 
-Implemented: `FADRivalMemory` is bounded and profile-owned; race results update encounter/win/loss counts, respect and grudge; the career subsystem uses the record to vary rival briefing and victory text. The open work is a focused persistence/dialogue regression test.
+Implemented: `FADRivalMemory` is bounded and profile-owned; race results update encounter/win/loss counts, respect and grudge; the career subsystem uses the record to vary rival briefing and victory text. Career route automation checks those context variants. A focused serialization/save-reload regression for rival memory remains open.
 
 - Profile capacity is bounded to 32 rivals and 128 encounters per rival.
 - Serialization uses the existing atomic profile/backup path.
-- The current suite checks profile migrations and career progression but does not isolate this branch behavior.
+- Generic profile migration/corruption tests do not isolate rival-memory serialization and save/reload.
 
 ## 2. AI driver personalities
 
@@ -58,7 +58,7 @@ Implemented: photo mode controls focal distance, aperture and exposure, and offe
 
 ## Sequencing
 
-Next priorities: add isolated tests for rival memory, personality behavior and pursuit traffic yielding; then implement the missing PIT/roadblock tactics if they remain in scope. Keep those separate from evidence that already passes.
+Outstanding checks: add an isolated rival-memory save/reload test, A/B behavior tests for personality weights, and a traffic shoulder/braking assertion during pursuit. PIT and roadblocks remain unimplemented; keep future tactics separate from evidence that already passes.
 
 ## Building these
 

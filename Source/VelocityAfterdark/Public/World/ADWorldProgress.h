@@ -13,6 +13,8 @@ struct VELOCITYAFTERDARK_API FADWorldSnapshot
     float Wetness = 0.f;
     float RainAmount = 0.f;
     float FogAmount = 0.f;
+    bool bCustomWaypointRecorded = false;
+    FVector2D CustomWaypoint = FVector2D::ZeroVector;
 
     bool IsValid() const;
 };

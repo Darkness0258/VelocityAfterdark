@@ -107,10 +107,13 @@ void UADVehiclePhysicsComponent::AdvanceRemoteWheels(float DeltaSeconds)
 {
     if (GetOwner()->HasAuthority() || !bReady) return;
     const float Sag=Definition.MassKg*9.81f/(4.f*Definition.SpringRateNPerM);
+    const float Direction=Telemetry.Gear<0 ? -1.f : 1.f;
+    const float WheelSpeedMps=Telemetry.SpeedKmh/3.6f*Direction;
     for (auto& Wheel:Wheels)
     {
         Wheel.SuspensionLengthM=Definition.SuspensionRestLengthM-(Telemetry.GroundedWheels>0 ? Sag : 0.f);
-        Wheel.SpinDegrees=FMath::Fmod(Wheel.SpinDegrees+Telemetry.SpeedKmh/3.6f/Definition.WheelRadiusM*DeltaSeconds*180.f/PI,360.f);
+        Wheel.AngularSpeedRadPerSecond=WheelSpeedMps/FMath::Max(.1f,Definition.WheelRadiusM);
+        Wheel.SpinDegrees=FMath::Fmod(Wheel.SpinDegrees+Wheel.AngularSpeedRadPerSecond*DeltaSeconds*180.f/PI,360.f);
     }
 }
 
@@ -137,6 +140,7 @@ void UADVehiclePhysicsComponent::ResetState()
     {
         Wheel.SuspensionLengthM = Definition.SuspensionRestLengthM;
         Wheel.SpinDegrees = 0.f;
+        Wheel.AngularSpeedRadPerSecond = 0.f;
     }
 }
 
@@ -144,6 +148,29 @@ float UADVehiclePhysicsComponent::GetForwardSpeedMps() const
 {
     return IsValid(Chassis) ? static_cast<float>(FVector::DotProduct(Chassis->GetPhysicsLinearVelocity(), Chassis->GetForwardVector()) * .01) : 0.f;
 }
+
+float UADVehiclePhysicsComponent::GetDrivenWheelSurfaceSpeedMps() const
+{
+    float SpeedSum=0.f;
+    int32 DrivenWheelCount=0;
+    for (int32 Index=0;Index<4;++Index)
+    {
+        if (GetDriveShare(Index)<=0.f) continue;
+        SpeedSum+=Wheels[Index].AngularSpeedRadPerSecond*Definition.WheelRadiusM;
+        ++DrivenWheelCount;
+    }
+    return DrivenWheelCount>0 ? SpeedSum/DrivenWheelCount : GetForwardSpeedMps();
+}
+
+#if WITH_DEV_AUTOMATION_TESTS
+void UADVehiclePhysicsComponent::SeedWheelSpeedsFromChassisForAutomation()
+{
+    if (!IsValid(Chassis) || Definition.WheelRadiusM<=0.f) return;
+    const FVector Forward=Chassis->GetForwardVector();
+    const float Speed=static_cast<float>(FVector::DotProduct(Chassis->GetPhysicsLinearVelocity()*0.01,Forward));
+    for (FWheelState& Wheel:Wheels) Wheel.AngularSpeedRadPerSecond=Speed/Definition.WheelRadiusM;
+}
+#endif
 
 float UADVehiclePhysicsComponent::GetGearRatio() const
 {
@@ -180,7 +207,7 @@ void UADVehiclePhysicsComponent::ShiftUp()
 void UADVehiclePhysicsComponent::ShiftDown()
 {
     if (!bReady || CurrentGear <= 1) return;
-    const float TargetRpm = static_cast<float>(ADVehicleMath::WheelRpm(GetForwardSpeedMps(), Definition.WheelRadiusM))
+    const float TargetRpm = static_cast<float>(ADVehicleMath::WheelRpm(GetDrivenWheelSurfaceSpeedMps(), Definition.WheelRadiusM))
         * Definition.GearRatios[CurrentGear - 2] * Definition.FinalDrive;
     if (TargetRpm < Definition.RedlineRpm * .98f) ChangeGear(CurrentGear - 1);
 }
@@ -195,7 +222,7 @@ void UADVehiclePhysicsComponent::RequestReverse()
 void UADVehiclePhysicsComponent::UpdateTransmission(float DeltaTime, float ForwardSpeedMps)
 {
     ShiftCooldown = FMath::Max(0.f, ShiftCooldown - DeltaTime);
-    const float RoadRpm = static_cast<float>(ADVehicleMath::EngineRpm(ForwardSpeedMps, Definition.WheelRadiusM,
+    const float RoadRpm = static_cast<float>(ADVehicleMath::EngineRpm(GetDrivenWheelSurfaceSpeedMps(), Definition.WheelRadiusM,
         GetGearRatio(), Definition.FinalDrive, Definition.IdleRpm, Definition.RedlineRpm));
     // A simple automatic launch clutch lets the engine rise above idle at low speed.
     const float LaunchRpm = FMath::Lerp(Definition.IdleRpm, 2200.f, ThrottleInput);
@@ -259,7 +286,7 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
         ? static_cast<float>(DesiredYawRate-ActualYawRate) : 0.f;
     const float StabilityBrakeN=static_cast<float>(ADVehicleMath::StabilityBrakeCorrectionN(YawError,0.0,3500.0,3500.0));
 
-    const float UnclampedRoadRpm = static_cast<float>(ADVehicleMath::WheelRpm(ForwardSpeedMps, Definition.WheelRadiusM))
+    const float UnclampedRoadRpm = static_cast<float>(ADVehicleMath::WheelRpm(GetDrivenWheelSurfaceSpeedMps(), Definition.WheelRadiusM))
         * FMath::Abs(GetGearRatio()) * Definition.FinalDrive;
     const float RevLimiter = UnclampedRoadRpm >= Definition.RedlineRpm ? 0.f : 1.f;
     const float ShiftTorqueScale = ShiftCooldown > 0.f ? .12f : 1.f;
@@ -284,6 +311,13 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
             Definition.SuspensionRestLengthM - Definition.SuspensionTravelM, Definition.SuspensionRestLengthM)
             : Definition.SuspensionRestLengthM;
         float WheelForwardSpeedMps = ForwardSpeedMps;
+        float LateralSpeedMps = 0.f;
+        float SlipAngle = 0.f;
+        float SuspensionN = 0.f;
+        float CapacityN = 0.f;
+        float LateralN = 0.f;
+        FVector TireForward=Forward;
+        FVector TireRight=FVector::CrossProduct(Up,Forward).GetSafeNormal();
         if (bContact)
         {
             ++Telemetry.GroundedWheels;
@@ -292,54 +326,66 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
                 GroundVelocityMps = Ground->GetPhysicsLinearVelocityAtPoint(Hit.ImpactPoint) * .01;
             const FVector AnchorVelocity = Chassis->GetPhysicsLinearVelocityAtPoint(Anchor) * .01 - GroundVelocityMps;
             const float CompressionM = Definition.SuspensionRestLengthM - Wheel.SuspensionLengthM;
-            const float SuspensionN = static_cast<float>(ADVehicleMath::SuspensionForceN(CompressionM,
+            SuspensionN = static_cast<float>(ADVehicleMath::SuspensionForceN(CompressionM,
                 FVector::DotProduct(AnchorVelocity, Up), Definition.SpringRateNPerM, Definition.DampingNsPerM, ReferenceLoadN * 4.f));
             // Suspension load and tangential grip share a real contact point. Chaos
             // resolves chassis roll, pitch, weight transfer, and collision response.
             Chassis->AddForceAtLocation(Up * (SuspensionN * 100.f), Anchor);
             const FVector SteeredForward = Index < 2 ? Forward.RotateAngleAxis(SteeringDegrees, Up) : Forward;
-            const FVector TireForward = FVector::VectorPlaneProject(SteeredForward, Hit.ImpactNormal).GetSafeNormal();
-            const FVector TireRight = FVector::CrossProduct(Hit.ImpactNormal, TireForward).GetSafeNormal();
+            TireForward = FVector::VectorPlaneProject(SteeredForward, Hit.ImpactNormal).GetSafeNormal();
+            TireRight = FVector::CrossProduct(Hit.ImpactNormal, TireForward).GetSafeNormal();
             const FVector ContactVelocity = Chassis->GetPhysicsLinearVelocityAtPoint(Hit.ImpactPoint) * .01 - GroundVelocityMps;
             WheelForwardSpeedMps = static_cast<float>(FVector::DotProduct(ContactVelocity, TireForward));
-            const float LateralSpeedMps = static_cast<float>(FVector::DotProduct(ContactVelocity, TireRight));
-            const float SlipAngle = static_cast<float>(ADVehicleMath::SlipAngleRadians(WheelForwardSpeedMps, LateralSpeedMps));
-            float CapacityN = static_cast<float>(ADVehicleMath::TireCapacityN(SuspensionN * FVector::DotProduct(Up, Hit.ImpactNormal),
+            LateralSpeedMps = static_cast<float>(FVector::DotProduct(ContactVelocity, TireRight));
+            SlipAngle = static_cast<float>(ADVehicleMath::SlipAngleRadians(WheelForwardSpeedMps, LateralSpeedMps));
+            CapacityN = static_cast<float>(ADVehicleMath::TireCapacityN(SuspensionN * FVector::DotProduct(Up, Hit.ImpactNormal),
                 ReferenceLoadN, Definition.TireFriction * FMath::Lerp(1.f,.72f,RoadWetness), Definition.TireLoadSensitivity));
             const bool bRearHandbrake = bHandbrake && Index >= 2;
             if (bRearHandbrake) CapacityN *= .65f;
-            float DriveN = TotalDriveForceN * GetDriveShare(Index);
-            // This first slice uses demand limiting, not a simulated ABS pump or
-            // wheel-inertia solver. Assist-off allows traction demand to consume
-            // lateral grip; a full slip-ratio tire model is a later physics gate.
-            if (bTractionControl) DriveN = FMath::Clamp(DriveN, -CapacityN * .9f, CapacityN * .9f);
-            const float BrakeShare = Index < 2 ? Definition.FrontBrakeBias * .5f : (1.f - Definition.FrontBrakeBias) * .5f;
-            float RequestedBrakeN = Definition.MaxBrakeForceN * BrakeInput * BrakeShare;
-            const float WheelSide=FMath::Sign(Definition.WheelAnchorsCm[Index].Y);
-            if (YawError*WheelSide>0.f)
-                RequestedBrakeN+=FMath::Abs(StabilityBrakeN)*(Index<2 ? .3f : .7f);
-            if (bRearHandbrake) RequestedBrakeN = FMath::Max(RequestedBrakeN, Definition.MaxBrakeForceN * .5f);
-            if (bAntiLockBrakes && !bRearHandbrake) RequestedBrakeN = FMath::Min(RequestedBrakeN, CapacityN * .9f);
-            const float EngineBrakeN = (1.f - ThrottleInput) * GetDriveShare(Index) *
-                static_cast<float>(ADVehicleMath::DriveForceN(Definition.EngineBrakingNm, FMath::Abs(GetGearRatio()),
-                    Definition.FinalDrive, Definition.DrivetrainEfficiency, Definition.WheelRadiusM));
-            const float ResistanceN = SuspensionN * Definition.RollingResistance;
-            const float BrakeN = static_cast<float>(ADVehicleMath::BrakeForceN(WheelForwardSpeedMps,
-                RequestedBrakeN + EngineBrakeN + ResistanceN, QuarterMassKg, Dt));
             // Limit lateral correction by available lateral momentum for low-speed
             // stability. This avoids alternating impulses near rest at low FPS.
             const float LateralStopForceN = FMath::Abs(LateralSpeedMps) * QuarterMassKg / Dt;
-            const float LateralN = FMath::Clamp(-SlipAngle * Definition.LateralStiffnessNPerRad,
+            LateralN = FMath::Clamp(-SlipAngle * Definition.LateralStiffnessNPerRad,
                 -LateralStopForceN, LateralStopForceN);
-            const ADVehicleMath::TireForce Forces = ADVehicleMath::FrictionCircle(DriveN + BrakeN, LateralN, CapacityN);
+        }
+
+        const bool bRearHandbrake=bHandbrake && Index>=2;
+        const float LateralMagnitude=FMath::Min(FMath::Abs(LateralN),CapacityN);
+        const float LongitudinalCapacityN=FMath::Sqrt(FMath::Max(0.f,
+            CapacityN*CapacityN-LateralMagnitude*LateralMagnitude));
+        float DriveN=TotalDriveForceN*GetDriveShare(Index);
+        // TCS limits driveline demand. With the assist disabled, surplus torque
+        // accelerates the wheel and becomes measurable slip instead of vanishing.
+        if (bTractionControl) DriveN=FMath::Clamp(DriveN,-LongitudinalCapacityN*.9f,LongitudinalCapacityN*.9f);
+        const float BrakeShare=Index<2 ? Definition.FrontBrakeBias*.5f : (1.f-Definition.FrontBrakeBias)*.5f;
+        float RequestedBrakeN=Definition.MaxBrakeForceN*BrakeInput*BrakeShare;
+        const float WheelSide=FMath::Sign(Definition.WheelAnchorsCm[Index].Y);
+        if (YawError*WheelSide>0.f) RequestedBrakeN+=FMath::Abs(StabilityBrakeN)*(Index<2 ? .3f : .7f);
+        if (bRearHandbrake) RequestedBrakeN=FMath::Max(RequestedBrakeN,Definition.MaxBrakeForceN*.5f);
+        if (bAntiLockBrakes && !bRearHandbrake && bContact)
+            RequestedBrakeN=FMath::Min(RequestedBrakeN,LongitudinalCapacityN*.9f);
+        const float EngineBrakeN=(1.f-ThrottleInput)*GetDriveShare(Index)*
+            static_cast<float>(ADVehicleMath::DriveForceN(Definition.EngineBrakingNm,FMath::Abs(GetGearRatio()),
+                Definition.FinalDrive,Definition.DrivetrainEfficiency,Definition.WheelRadiusM));
+        const float ResistanceN=bContact ? SuspensionN*Definition.RollingResistance : 0.f;
+        const float BrakeTorqueNm=(RequestedBrakeN+EngineBrakeN+ResistanceN)*Definition.WheelRadiusM;
+        const ADVehicleMath::WheelTireStep TireStep=ADVehicleMath::SolveWheelTireStep(
+            Wheel.AngularSpeedRadPerSecond,WheelForwardSpeedMps,DriveN*Definition.WheelRadiusM,
+            BrakeTorqueNm,LongitudinalCapacityN,Definition.WheelRadiusM,Definition.WheelInertiaKgM2,Dt);
+        Wheel.AngularSpeedRadPerSecond=static_cast<float>(TireStep.AngularSpeedRadPerSecond);
+        const float WheelSlipRatio=static_cast<float>(ADVehicleMath::SlipRatio(
+            Wheel.AngularSpeedRadPerSecond*Definition.WheelRadiusM,WheelForwardSpeedMps));
+        if (bContact)
+        {
+            const ADVehicleMath::TireForce Forces=ADVehicleMath::FrictionCircle(TireStep.LongitudinalForceN,LateralN,CapacityN);
             const FVector TireForceN = TireForward * Forces.LongitudinalN + TireRight * Forces.LateralN;
             Chassis->AddForceAtLocation(TireForceN * 100.f, Hit.ImpactPoint);
             if (UPrimitiveComponent* Ground = Hit.GetComponent(); IsValid(Ground) && Ground->IsSimulatingPhysics())
                 Ground->AddForceAtLocation(-(TireForceN + Up * SuspensionN) * 100.f, Hit.ImpactPoint);
             Telemetry.Slip = FMath::Max(Telemetry.Slip, FMath::Clamp(FMath::Abs(SlipAngle) / .45f, 0.f, 1.f));
+            Telemetry.Slip = FMath::Max(Telemetry.Slip, FMath::Clamp(FMath::Abs(WheelSlipRatio) / .3f, 0.f, 1.f));
         }
-        const float DegreesPerSecond = WheelForwardSpeedMps / Definition.WheelRadiusM * (180.f / PI);
-        Wheel.SpinDegrees = FMath::Fmod(Wheel.SpinDegrees + DegreesPerSecond * Dt, 360.f);
+        Wheel.SpinDegrees=FMath::Fmod(Wheel.SpinDegrees+Wheel.AngularSpeedRadPerSecond*Dt*(180.f/PI),360.f);
     }
 
     if (SpeedMps > .01f)

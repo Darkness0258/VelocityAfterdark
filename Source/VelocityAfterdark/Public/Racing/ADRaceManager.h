@@ -28,6 +28,7 @@ struct FADRacerState
     double LastRecoverySeconds = -10.;
     int32 RecoveryCount = 0;
     int32 Place = 1;
+    ADRaceRules::Grade Grade = ADRaceRules::Grade::D;
     bool bDNF = false;
     bool bWrongWay = false;
 };

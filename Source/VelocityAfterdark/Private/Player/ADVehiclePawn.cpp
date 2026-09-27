@@ -29,42 +29,107 @@ namespace
 {
     struct FBodySection { float X, Width, Bottom, Shoulder; };
 
+    float CatmullRom(float P0, float P1, float P2, float P3, float T)
+    {
+        const float T2 = T * T;
+        const float T3 = T2 * T;
+        return .5f * ((2.f * P1) + (-P0 + P2) * T + (2.f * P0 - 5.f * P1 + 4.f * P2 - P3) * T2
+            + (-P0 + 3.f * P1 - 3.f * P2 + P3) * T3);
+    }
+
+    FVector CatmullRom(const FVector& P0, const FVector& P1, const FVector& P2, const FVector& P3, float T)
+    {
+        return FVector(CatmullRom(P0.X, P1.X, P2.X, P3.X, T), CatmullRom(P0.Y, P1.Y, P2.Y, P3.Y, T),
+            CatmullRom(P0.Z, P1.Z, P2.Z, P3.Z, T));
+    }
+
     void CreateLoft(UProceduralMeshComponent* Mesh, int32 Section, const TArray<FBodySection>& Sections,
         UMaterialInterface* Material)
     {
         TArray<FVector> Vertices;
         TArray<int32> Indices;
         TArray<FVector2D> UVs;
-        for (const FBodySection& S : Sections)
+        if (!Mesh || Sections.Num() < 2) return;
+
+        // Interpolate the authored body stations before tessellation. This keeps the
+        // vehicle-data silhouettes while removing the stepped, eight-plane profile.
+        TArray<FBodySection> SmoothSections;
+        SmoothSections.Reserve((Sections.Num() - 1) * 4 + 1);
+        for (int32 I = 0; I < Sections.Num() - 1; ++I)
         {
-            const FVector Ring[] = {
+            const FBodySection& A = Sections[FMath::Max(0, I - 1)];
+            const FBodySection& B = Sections[I];
+            const FBodySection& C = Sections[I + 1];
+            const FBodySection& D = Sections[FMath::Min(Sections.Num() - 1, I + 2)];
+            for (int32 Step = 0; Step < 4; ++Step)
+            {
+                const float T = Step * .25f;
+                SmoothSections.Add({
+                    CatmullRom(A.X, B.X, C.X, D.X, T),
+                    FMath::Max(1.f, CatmullRom(A.Width, B.Width, C.Width, D.Width, T)),
+                    CatmullRom(A.Bottom, B.Bottom, C.Bottom, D.Bottom, T),
+                    CatmullRom(A.Shoulder, B.Shoulder, C.Shoulder, D.Shoulder, T)
+                });
+            }
+        }
+        SmoothSections.Add(Sections.Last());
+
+        constexpr int32 CrossSectionControlCount = 8;
+        constexpr int32 CrossSectionSubdivisions = 4;
+        constexpr int32 RingVertexCount = CrossSectionControlCount * CrossSectionSubdivisions;
+        for (const FBodySection& S : SmoothSections)
+        {
+            const FVector ControlRing[CrossSectionControlCount] = {
                 {S.X, -S.Width, S.Bottom}, {S.X, -S.Width, S.Shoulder - 8},
                 {S.X, -S.Width * 0.86f, S.Shoulder}, {S.X, S.Width * 0.86f, S.Shoulder},
                 {S.X, S.Width, S.Shoulder - 8}, {S.X, S.Width, S.Bottom},
                 {S.X, S.Width * 0.83f, S.Bottom - 4}, {S.X, -S.Width * 0.83f, S.Bottom - 4}
             };
-            for (int32 J = 0; J < 8; ++J)
+            for (int32 Control = 0; Control < CrossSectionControlCount; ++Control)
             {
-                Vertices.Add(Ring[J]);
-                UVs.Add(FVector2D(S.X / 450.0f, J / 8.0f));
+                const FVector& P0 = ControlRing[(Control + CrossSectionControlCount - 1) % CrossSectionControlCount];
+                const FVector& P1 = ControlRing[Control];
+                const FVector& P2 = ControlRing[(Control + 1) % CrossSectionControlCount];
+                const FVector& P3 = ControlRing[(Control + 2) % CrossSectionControlCount];
+                for (int32 Step = 0; Step < CrossSectionSubdivisions; ++Step)
+                {
+                    const FVector Point = CatmullRom(P0, P1, P2, P3, Step * .25f);
+                    const int32 RingIndex = Control * CrossSectionSubdivisions + Step;
+                    Vertices.Add(Point);
+                    UVs.Add(FVector2D(S.X / 450.0f, static_cast<float>(RingIndex) / RingVertexCount));
+                }
             }
         }
-        for (int32 I = 0; I < Sections.Num() - 1; ++I)
+
+        for (int32 I = 0; I < SmoothSections.Num() - 1; ++I)
         {
-            for (int32 J = 0; J < 8; ++J)
+            for (int32 J = 0; J < RingVertexCount; ++J)
             {
-                const int32 A = I * 8 + J, B = A + 8;
-                const int32 D = I * 8 + (J + 1) % 8, C = D + 8;
+                const int32 A = I * RingVertexCount + J, B = A + RingVertexCount;
+                const int32 D = I * RingVertexCount + (J + 1) % RingVertexCount, C = D + RingVertexCount;
                 // Unreal's front face and procedural normal convention is clockwise.
                 Indices.Append({A, C, B, A, D, C});
             }
         }
-        for (int32 J = 1; J < 7; ++J)
+
+        const int32 FrontCenter = Vertices.Num();
+        const int32 RearCenter = FrontCenter + 1;
+        const auto RingCenter = [&SmoothSections](const FBodySection& S)
         {
-            Indices.Append({0, J + 1, J});
-            const int32 Last = (Sections.Num() - 1) * 8;
-            Indices.Append({Last, Last + J, Last + J + 1});
+            return FVector(S.X, 0.f, (S.Bottom + S.Shoulder) * .5f);
+        };
+        Vertices.Add(RingCenter(SmoothSections[0]));
+        Vertices.Add(RingCenter(SmoothSections.Last()));
+        UVs.Add(FVector2D(SmoothSections[0].X / 450.0f, .5f));
+        UVs.Add(FVector2D(SmoothSections.Last().X / 450.0f, .5f));
+        const int32 RearRingStart = (SmoothSections.Num() - 1) * RingVertexCount;
+        for (int32 J = 0; J < RingVertexCount; ++J)
+        {
+            const int32 Next = (J + 1) % RingVertexCount;
+            Indices.Append({FrontCenter, Next, J});
+            Indices.Append({RearCenter, RearRingStart + J, RearRingStart + Next});
         }
+
         TArray<FVector> Normals;
         TArray<FProcMeshTangent> Tangents;
         UKismetProceduralMeshLibrary::CalculateTangentsForMesh(Vertices, Indices, UVs, Normals, Tangents);
@@ -511,6 +576,7 @@ void AADVehiclePawn::CycleCamera()
 bool AADVehiclePawn::PlaceForRace(const FTransform& Transform)
 {
     if (!HasAuthority() || bInGarage || Transform.ContainsNaN()) return false;
+    RecoveryTransform=Transform;
     Chassis->SetSimulatePhysics(true);
     Chassis->SetPhysicsLinearVelocity(FVector::ZeroVector);
     Chassis->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);

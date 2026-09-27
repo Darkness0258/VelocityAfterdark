@@ -226,8 +226,8 @@ public:
         if (!Car || !Mode || !Mode->IsWorldReady()) return false;
         const auto Key=[PC](FKey K,EInputEvent Event,float Amount=1.f)
         { PC->InputKey(FInputKeyEventArgs::CreateSimulated(K,Event,Amount)); };
-        // The first Enter starts a paused, real-time story camera. Use wall time
-        // for test staging so the paused world clock cannot deadlock this case.
+        // The first Enter starts a real-time story camera while physics driving
+        // controls are suspended. Wall time keeps this case independent of pauses.
         const float Now=static_cast<float>(FPlatformTime::Seconds());
         if (Stage==0)
         {
@@ -238,9 +238,18 @@ public:
             if (Test->TestNotNull(TEXT("Car has generated coachwork"), Shell) &&
                 Test->TestTrue(TEXT("Coachwork contains middle cross-section"), Shell->ProcVertexBuffer.Num() > 31))
             {
-                Test->TestTrue(TEXT("Coachwork top normals point upward"), Shell->ProcVertexBuffer[26].Normal.Z > .1f);
-                Test->TestTrue(TEXT("Coachwork underside normals point downward"), Shell->ProcVertexBuffer[31].Normal.Z < -.1f);
-                Test->TestTrue(TEXT("Coachwork left normals point outward"), Shell->ProcVertexBuffer[25].Normal.Y < -.1f);
+                bool bHasUpwardCoachwork = false;
+                bool bHasDownwardCoachwork = false;
+                bool bHasOutwardLeftCoachwork = false;
+                for (const FProcMeshVertex& Vertex : Shell->ProcVertexBuffer)
+                {
+                    bHasUpwardCoachwork |= Vertex.Position.Z > 12.f && Vertex.Normal.Z > .1f;
+                    bHasDownwardCoachwork |= Vertex.Position.Z < -5.f && Vertex.Normal.Z < -.1f;
+                    bHasOutwardLeftCoachwork |= Vertex.Position.Y < -40.f && Vertex.Normal.Y < -.1f;
+                }
+                Test->TestTrue(TEXT("Coachwork top normals point upward"), bHasUpwardCoachwork);
+                Test->TestTrue(TEXT("Coachwork underside normals point downward"), bHasDownwardCoachwork);
+                Test->TestTrue(TEXT("Coachwork left normals point outward"), bHasOutwardLeftCoachwork);
             }
             Key(EKeys::Enter,IE_Pressed);
             StageStart=Now; Stage=1;
@@ -250,47 +259,55 @@ public:
         switch(Stage)
         {
         case 1:
+        {
             Test->TestTrue(TEXT("Enter starts the actual driving session"),PC->IsSessionStarted());
+            auto* Chassis=Cast<UPrimitiveComponent>(Car->GetRootComponent());
             Test->TestTrue(TEXT("First entry presents the Dockside arrival cutscene"),
-                PC->GetCinematic()->GetMode()==EADCinematicMode::Story && PC->IsPaused());
+                PC->GetCinematic()->GetMode()==EADCinematicMode::Story && !PC->IsPaused()
+                && !Car->IsDrivingEnabled() && Chassis && !Chassis->IsSimulatingPhysics());
             Key(EKeys::Enter,IE_Released,0);
+            break;
+        }
+        case 2:
+            Test->TestTrue(TEXT("Arrival remains active until a separate confirm input"),PC->GetCinematic()->IsActive());
             Key(EKeys::Enter,IE_Pressed);
             break;
-        case 2:
+        case 3:
             Test->TestFalse(TEXT("Skipping the arrival cutscene returns to live driving"),PC->IsPaused());
+            Test->TestFalse(TEXT("Confirm closes the arrival story sequence"),PC->GetCinematic()->IsActive());
             Key(EKeys::W,IE_Pressed);
             break;
-        case 3:
+        case 4:
             Test->TestTrue(TEXT("W mapping feeds vehicle throttle"),State.Throttle>.9f);
             Key(EKeys::W,IE_Released,0);
             Key(EKeys::A,IE_Pressed);
             break;
-        case 4:
+        case 5:
             Test->TestTrue(TEXT("Release clears throttle"),State.Throttle<.01f);
             Test->TestTrue(TEXT("A mapping steers left"),State.Steering<-.1f);
             Key(EKeys::A,IE_Released,0);
             Key(EKeys::D,IE_Pressed);
             break;
-        case 5:
+        case 6:
             Test->TestTrue(TEXT("D mapping steers right"),State.Steering>.1f);
             Key(EKeys::D,IE_Released,0);
             Key(EKeys::C,IE_Pressed);
             break;
-        case 6:
+        case 7:
             Test->TestTrue(TEXT("C mapping selects hood camera"),Car->GetCameraMode()==EADCameraMode::Hood);
             Key(EKeys::C,IE_Released,0);
             Key(EKeys::Gamepad_RightTriggerAxis,IE_Axis,.5f);
             break;
-        case 7:
+        case 8:
             Test->TestTrue(TEXT("Gamepad trigger routing preserves analog throttle"),State.Throttle>.1f && State.Throttle<.9f);
             Key(EKeys::Gamepad_RightTriggerAxis,IE_Axis,0);
             Key(EKeys::W,IE_Pressed);
             break;
-        case 8:
+        case 9:
             Test->TestTrue(TEXT("Throttle can be reacquired after device switch"),State.Throttle>.9f);
             PC->FlushPressedKeys();
             break;
-        case 9:
+        case 10:
             Test->TestTrue(TEXT("Focus-loss flush clears vehicle throttle"),State.Throttle<.01f);
             Car->ResetVehicle();
             if (auto* Chassis = Cast<UPrimitiveComponent>(Car->GetRootComponent()))
@@ -304,7 +321,7 @@ public:
             }
             else Test->AddError(TEXT("Vehicle root is not a physics primitive"));
             break;
-        case 10:
+        case 11:
             if (auto* Chassis = Cast<UPrimitiveComponent>(Car->GetRootComponent()))
             {
                 Chassis->SetPhysicsLinearVelocity(Car->GetActorRightVector()*3000.f);
@@ -324,7 +341,7 @@ public:
                 FrozenPosition = Car->GetActorLocation();
             }
             break;
-        case 11:
+        case 12:
             Test->TestTrue(TEXT("Failed startup holds the chassis safely in place"),Car->GetActorLocation().Equals(FrozenPosition,.1));
             Car->GetPhysics()->VehicleDefinitionFile = SavedDefinitionPath;
             Car->ResetVehicle();
@@ -332,18 +349,18 @@ public:
             Test->TestTrue(TEXT("Recovery restores active driving presentation and controls together"),Car->IsDrivingEnabled());
             Key(EKeys::W,IE_Pressed);
             break;
-        case 12:
+        case 13:
             Test->TestTrue(TEXT("Throttle can be reacquired after data recovery"),State.Throttle>.9f);
             Key(EKeys::W,IE_Released,0);
             Car->ResetVehicle();
             Key(EKeys::Tab,IE_Pressed);
             break;
-        case 13:
+        case 14:
             Test->TestEqual(TEXT("Tab selects next difficulty"),PC->GetSelectedDifficulty(),2);
             Key(EKeys::Tab,IE_Released,0);
             Key(EKeys::F,IE_Pressed);
             break;
-        case 14:
+        case 15:
             Test->TestNotNull(TEXT("Controller caches active race manager"),PC->GetRaceManager());
             if (!PC->GetRaceManager()) return true;
             Test->TestTrue(TEXT("F starts race countdown"),PC->GetRaceManager()->GetState()==EADRaceState::Countdown);
@@ -351,23 +368,23 @@ public:
             Key(EKeys::F,IE_Released,0);
             Key(EKeys::W,IE_Pressed);
             break;
-        case 15:
+        case 16:
             Test->TestTrue(TEXT("Held throttle cannot bypass countdown"),State.Throttle<.01f && State.SpeedKmh<1.f);
             Key(EKeys::W,IE_Released,0);
             Key(EKeys::BackSpace,IE_Pressed);
             break;
-        case 16:
+        case 17:
             Test->TestTrue(TEXT("Backspace leaves race"),PC->GetRaceManager()->GetState()==EADRaceState::Idle);
             Test->TestEqual(TEXT("Leaving via input clears race entries"),PC->GetRaceManager()->GetRacers().Num(),0);
             Key(EKeys::BackSpace,IE_Released,0);
             Key(EKeys::Gamepad_FaceButton_Right,IE_Pressed);
             break;
-        case 17:
+        case 18:
             Test->TestTrue(TEXT("Gamepad B starts race countdown"),PC->GetRaceManager()->GetState()==EADRaceState::Countdown);
             Key(EKeys::Gamepad_FaceButton_Right,IE_Released,0);
             Key(EKeys::Gamepad_DPad_Left,IE_Pressed);
             break;
-        case 18:
+        case 19:
             Test->TestTrue(TEXT("D-pad left returns to free driving"),PC->GetRaceManager()->GetState()==EADRaceState::Idle);
             Key(EKeys::Gamepad_DPad_Left,IE_Released,0);
             Car->ResetVehicle();
