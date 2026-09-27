@@ -1,6 +1,6 @@
 # Visual presentation pass — 2026-09-26
 
-This pass improves the visible UE 5.8 district and driving interface while keeping the current DX11/SM5 path and low-memory target. It is a presentation polish pass over the existing vertical slice, not a replacement for production vehicle and environment art.
+This dated pass improved the visible UE 5.8 district and driving interface while keeping the DX11/SM5 path and low-memory target used at the time. It is a presentation polish pass over the existing vertical slice, not a replacement for production vehicle and environment art.
 
 ## What changed
 
@@ -11,12 +11,12 @@ This pass improves the visible UE 5.8 district and driving interface while keepi
 
 ## Validation
 
-- `python Scripts/validate_source.py` passed after the source changes: 149 project text files and the configured source/data contracts.
-- Unreal editor build, generated texture import, and material compilation passed through `Scripts/Invoke-Afterdark.ps1 -Action UpgradeVisuals`.
-- Four editor captures were produced and visually inspected. The fresh cooked Windows package passed `Scripts/Smoke-Package.ps1 -PackageDirectory Artifacts/Package/Windows -OutputName VisualPolishPackageSmoke`; the runtime log reports all four capture requests, `AFTERDARK_RENDER_SMOKE_COMPLETE`, and a clean exit. The harness also confirmed the cooked data loads and three background city cars are instantiated.
+- At the time of this pass, `python Scripts/validate_source.py` passed 149 project text files and the configured source/data contracts.
+- The Unreal editor build, generated texture import, and material compilation passed through `Scripts/Invoke-Afterdark.ps1 -Action UpgradeVisuals` for that pass.
+- Four editor captures were produced and visually inspected. The then-current cooked Windows package passed `Scripts/Smoke-Package.ps1 -PackageDirectory Artifacts/Package/Windows -OutputName VisualPolishPackageSmoke`; its runtime log reports all four capture requests, `AFTERDARK_RENDER_SMOKE_COMPLETE`, and a clean exit. The harness also confirmed the cooked data loads and three background city cars are instantiated.
 - The 2026-09-26 cooked manifest contained the original three PBR materials and six generated texture assets with their bulk data. The follow-up set extends that baseline; see the current package manifest and validation report rather than treating this historical file list as current.
 
-Captured package views are in `Artifacts/VisualPolishPackageSmoke/`: `AfterdarkTitle.png`, `AfterdarkChase.png`, `AfterdarkHood.png`, and `AfterdarkCockpit.png`. The smoke log and frame capture are `runtime.log` and `frames.csv` in that directory. The package is `Artifacts/Package/Windows/` and its current executable/container hashes are recorded in `Artifacts/build-proof.json`.
+Historical package views are in `Artifacts/VisualPolishPackageSmoke/`: `AfterdarkTitle.png`, `AfterdarkChase.png`, `AfterdarkHood.png`, and `AfterdarkCockpit.png`. The smoke log and frame capture are `runtime.log` and `frames.csv` in that directory. Those captures predate the current package at `Artifacts/Package/Windows/`; `Artifacts/build-proof.json` tracks the latest executable/container hashes and must not be used to identify the older visual-smoke binary. The latest package's cooked camera smoke is part of the 2026-09-27 consolidated report in `VALIDATION.md`.
 
 ## Remaining art limits
 

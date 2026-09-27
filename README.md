@@ -1,6 +1,6 @@
 # VELOCITY: AFTERDARK
 
-An Unreal Engine 5.8 C++ racing prototype set in Nova City. The current source includes five data-driven original vehicles, eight career circuits, a transactional garage, regional exploration, weather, traffic and police pursuits. A separately licensed static background car dresses the playable avenue. Its fresh Win64 package passed 45 Unreal automation cases, startup/race/garage checks, a four-size viewport matrix and a loopback host/client driving smoke. This is not the complete AAA game; see the dated validation record for evidence and limits.
+An Unreal Engine 5.8 C++ racing prototype set in Nova City. The current source includes five data-driven original vehicles, eight career circuits, a transactional garage, regional exploration, weather, traffic and police pursuits. A separately licensed static background car dresses the playable avenue. The package built on 2026-09-27 passed all ten stages of the prepared acceptance suite, including 56 Unreal automation cases, portable vehicle/race suites, cooked race and garage flows, a career reward-save retry, display captures, loopback networking and a 120-second drive sample. This is not the complete AAA game or a release acceptance; see the dated [validation record](Docs/VALIDATION.md) for evidence and limits.
 
 The main project is **`VelocityAfterdark.uproject` in this directory**. A separate `MyProject/` folder, if present, is preserved and is not used by these scripts.
 

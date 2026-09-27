@@ -128,6 +128,8 @@ switch ($Action) {
             'Afterdark.Ownership.Transactions', 'Afterdark.Ownership.CorruptionRecovery', 'Afterdark.Ownership.MigrationAndRollback')
         $expectedTests += @('Afterdark.Data.RoadNetwork', 'Afterdark.Ownership.WorldProgress')
         $expectedTests += @('Afterdark.Data.RaceCatalog', 'Afterdark.Career.RouteProgression',
+            'Afterdark.Career.CommitPersistence',
+            'Afterdark.Runtime.CareerRaceRewardRetry',
             'Afterdark.Map.ZoomPanProjection', 'Afterdark.Ownership.MapWaypointPersistence',
             'Afterdark.Ownership.VehicleCollection', 'Afterdark.Ownership.VehicleMigrationAndRollback',
             'Afterdark.Runtime.GarageVehicleSwitch', 'Afterdark.Input.Rebinding',

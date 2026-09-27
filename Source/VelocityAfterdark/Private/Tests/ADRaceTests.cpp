@@ -4,9 +4,16 @@
 #include "Core/ADGameMode.h"
 #include "CoreGlobals.h"
 #include "Editor.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Career/ADCareerSubsystem.h"
+#include "HAL/FileManager.h"
+#include "InputKeyEventArgs.h"
 #include "Misc/App.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Ownership/ADOwnershipSubsystem.h"
 #include "Player/ADPlayerController.h"
 #include "Player/ADVehiclePawn.h"
 #include "Racing/ADRaceDriverComponent.h"
@@ -18,13 +25,44 @@
 
 namespace ADRaceTests
 {
+    /** Keeps the first career reward unwritable until the player retries it. */
+    struct FCareerRaceSaveFixture
+    {
+        FString Root = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Automation/CareerRaceRetry") /
+            FGuid::NewGuid().ToString(EGuidFormats::Digits));
+        FString Parent = Root / TEXT("repairable_parent");
+        FString SavePath = Parent / TEXT("profile.json");
+        bool bBlockerWritten = false;
+
+        FCareerRaceSaveFixture()
+        {
+            IFileManager::Get().MakeDirectory(*Root, true);
+            bBlockerWritten = FFileHelper::SaveStringToFile(TEXT("blocks directory creation"), *Parent);
+        }
+
+        bool RepairParent()
+        {
+            IFileManager::Get().Delete(*Parent, false, true);
+            return IFileManager::Get().MakeDirectory(*Parent, true);
+        }
+
+        ~FCareerRaceSaveFixture()
+        {
+            for (const TCHAR* Suffix : {TEXT(""), TEXT(".bak"), TEXT(".tmp"), TEXT(".bak.tmp"), TEXT(".lock")})
+                IFileManager::Get().Delete(*(SavePath + Suffix), false, true);
+            IFileManager::Get().Delete(*Parent, false, true);
+            IFileManager::Get().DeleteDirectory(*Root, false, true);
+        }
+    };
+
     /** Full races use ordinary throttle, brake and steering, including the QA
      * player. No transform or velocity is injected into the measured race. */
     class FRunRace final : public IAutomationLatentCommand
     {
     public:
-        FRunRace(FAutomationTestBase* InTest, int32 InDifficulty, FString InRaceId=TEXT(""))
-            : Test(InTest), Difficulty(InDifficulty), Deadline(FPlatformTime::Seconds() + 600.), RaceId(MoveTemp(InRaceId)) {}
+        FRunRace(FAutomationTestBase* InTest, int32 InDifficulty, FString InRaceId=TEXT(""), bool bInCareer=false)
+            : Test(InTest), Difficulty(InDifficulty), Deadline(FPlatformTime::Seconds() + 600.), RaceId(MoveTemp(InRaceId)),
+              bCareer(bInCareer), CareerFixture(bCareer ? MakeUnique<FCareerRaceSaveFixture>() : nullptr) {}
         virtual ~FRunRace() override { Cleanup(); }
 
         virtual bool Update() override
@@ -43,7 +81,7 @@ namespace ADRaceTests
                 Player = Controller.IsValid() ? Controller->GetVehiclePawn() : nullptr;
                 if (!Manager.IsValid() || !Controller.IsValid() || !Player.IsValid()) return false;
                 if (!Manager->IsReady()) return Fail(Manager->GetLoadError());
-                if (!RaceId.IsEmpty())
+                if (!RaceId.IsEmpty() || bCareer)
                 {
                     FString Error;
                     if (!Mode->InitializeLivingWorld(Error)) return Fail(Error);
@@ -54,6 +92,7 @@ namespace ADRaceTests
                     if (!Mode->GetAtmosphere()->RestoreWorldSnapshot(Dry)) return Fail(TEXT("Cannot set the route test weather."));
                     Mode->GetAtmosphere()->SetFrozen(true);
                 }
+                if (bCareer && !InitializeCareerFixture(World)) return Finish();
                 PreviousStep = FApp::GetFixedDeltaTime();
                 bPreviousFixed = FApp::UseFixedTimeStep();
                 FApp::SetFixedDeltaTime(1. / 30.);
@@ -124,6 +163,15 @@ namespace ADRaceTests
                 return false;
             }
 
+            if (Stage == 6)
+            {
+                if (FPlatformTime::Seconds() < CareerRetryInputWall) return false;
+                Controller->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Enter, IE_Released, 0.f));
+                if (!CompleteCareerRewardRetry()) return Finish();
+                if (!LeaveAndCheckCleanup()) return Finish();
+                return Finish();
+            }
+
             if (Stage == 5)
             {
                 if (!CheckPhysicalRace()) return Finish();
@@ -131,6 +179,11 @@ namespace ADRaceTests
                     return Fail(TEXT("Race exceeded its configured simulation timeout."));
                 if (!Manager->IsClassificationFinal()) return false;
                 if (!ValidateResults()) return Finish();
+                if (bCareer)
+                {
+                    if (!BeginCareerRewardRetry()) return Finish();
+                    return false;
+                }
                 if (!LeaveAndCheckCleanup()) return Finish();
                 if (!StartSelectedRace()) return Fail(TEXT("Restart from finished results failed."));
                 if (!ValidateGrid()) return Finish();
@@ -143,14 +196,96 @@ namespace ADRaceTests
     private:
         bool StartSelectedRace()
         {
-            return RaceId.IsEmpty() ? Manager->StartRace(Player.Get(),Difficulty)
+            return bCareer ? Manager->StartCareerRace(Player.Get())
+                : RaceId.IsEmpty() ? Manager->StartRace(Player.Get(),Difficulty)
                 : Manager->StartRaceById(Player.Get(),RaceId,Difficulty);
+        }
+
+        bool InitializeCareerFixture(UWorld* World)
+        {
+            if (!CareerFixture || !Test->TestTrue(TEXT("Career save blocker fixture is present"), CareerFixture->bBlockerWritten)) return false;
+            UGameInstance* GameInstance = World->GetGameInstance();
+            Career = GameInstance ? GameInstance->GetSubsystem<UADCareerSubsystem>() : nullptr;
+            Ownership = GameInstance ? GameInstance->GetSubsystem<UADOwnershipSubsystem>() : nullptr;
+            if (!Career.IsValid() || !Ownership.IsValid() || !Career->IsReady() || !Ownership->IsReady())
+            { Test->AddError(TEXT("Career race could not resolve ready game-instance subsystems.")); return false; }
+            FString Error;
+            if (!Test->TestTrue(TEXT("Career race uses an isolated blocked save"), Ownership->InitializeProfile(CareerFixture->SavePath, Error)))
+            { Test->AddError(Error); return false; }
+            const FADCareerChapter* Chapter = Career->GetActiveChapter(Ownership->GetProfile());
+            if (!Chapter) { Test->AddError(TEXT("New isolated profile has no active career chapter.")); return false; }
+            ExpectedChapterId = Chapter->Id;
+            ExpectedRaceId = Chapter->RaceId;
+            ExpectedDifficulty = Chapter->Difficulty;
+            ExpectedWinCredits = Chapter->WinCredits;
+            ExpectedFinishCredits = Chapter->FinishCredits;
+            ExpectedRep = Chapter->RepReward;
+            StartingCredits = Ownership->GetProfile().Credits;
+            Test->TestEqual(TEXT("Opening career chapter is the authored arrival event"), ExpectedChapterId, FString(TEXT("arrival")));
+            return true;
+        }
+
+        bool BeginCareerRewardRetry()
+        {
+            if (!Manager->HasPendingCareerReward())
+            { Test->AddError(TEXT("Finished career result did not remain pending after its failed automatic save.")); return false; }
+            if (!Test->TestTrue(TEXT("Automatic career save exposes the player retry message"),
+                Manager->GetCareerMessage().Contains(TEXT("REWARD NOT SAVED")) && Manager->GetCareerMessage().Contains(TEXT("Enter retries")))) return false;
+            if (!Test->TestEqual(TEXT("Failed save does not charge credits"), Ownership->GetProfile().Credits, StartingCredits)
+                || !Test->TestEqual(TEXT("Failed save does not advance career stats"), Ownership->GetProfile().RacesFinished, int64(0))) return false;
+
+            const int32 Place = Manager->GetRacers()[0].Place;
+            if (Place < 1 || Place > 4) { Test->AddError(TEXT("Finished player has no valid classified place.")); return false; }
+            PreviousChapterId = ExpectedChapterId;
+            if (!CareerFixture->RepairParent()) { Test->AddError(TEXT("Could not repair isolated career save directory.")); return false; }
+            Controller->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Enter, IE_Pressed, 1.f));
+            ExpectedCareerCredits = StartingCredits + (Place == 1 ? ExpectedWinCredits : ExpectedFinishCredits);
+            ExpectedCareerReputation = Place == 1 ? ExpectedRep : 0;
+            bExpectedCareerAdvance = Place == 1;
+            CareerRetryInputWall = FPlatformTime::Seconds() + .25;
+            Stage = 6;
+            return true;
+        }
+
+        bool CompleteCareerRewardRetry()
+        {
+            if (!Test->TestFalse(TEXT("Enter input clears the pending career reward after saving"), Manager->HasPendingCareerReward())) return false;
+            const FADGarageProfile& Committed = Ownership->GetProfile();
+            if (!Test->TestEqual(TEXT("Retry charges the authored classification reward"), Committed.Credits, ExpectedCareerCredits)
+                || !Test->TestEqual(TEXT("Retry counts the physical race exactly once"), Committed.RacesFinished, int64(1))
+                || !Test->TestEqual(TEXT("Retry counts a win only for first place"), Committed.RaceWins, int64(bExpectedCareerAdvance ? 1 : 0))
+                || !Test->TestEqual(TEXT("Career REP is awarded only for a chapter win"), Committed.Reputation, ExpectedCareerReputation)
+                || !Test->TestEqual(TEXT("Career result has one stable receipt"), Committed.AwardedRaceIds.Num(), 1)) return false;
+            if (bExpectedCareerAdvance)
+                Test->TestTrue(TEXT("Winning retry completes the active chapter"), Committed.CompletedChapters.Contains(PreviousChapterId));
+            else
+                Test->TestFalse(TEXT("Runner-up retry does not advance the chapter"), Committed.CompletedChapters.Contains(PreviousChapterId));
+
+            FString Error;
+            if (!Test->TestTrue(TEXT("Career race reward survives a profile reload"), Ownership->InitializeProfile(CareerFixture->SavePath, Error)))
+            { Test->AddError(Error); return false; }
+            const FADGarageProfile& Reloaded = Ownership->GetProfile();
+            if (!Test->TestEqual(TEXT("Reload retains the committed reward credits"), Reloaded.Credits, ExpectedCareerCredits)
+                || !Test->TestEqual(TEXT("Reload retains one completed race"), Reloaded.RacesFinished, int64(1))
+                || !Test->TestEqual(TEXT("Reload retains the player's exact win count"), Reloaded.RaceWins, int64(bExpectedCareerAdvance ? 1 : 0))
+                || !Test->TestEqual(TEXT("Reload retains the reward receipt"), Reloaded.AwardedRaceIds.Num(), 1)) return false;
+            const FADCareerChapter* Next = Career->GetActiveChapter(Reloaded);
+            const FString ExpectedNextChapter = bExpectedCareerAdvance && Career->GetChapters().Num() > 1
+                ? Career->GetChapters()[1].Id : PreviousChapterId;
+            Test->TestEqual(TEXT("Reload selects the chapter dictated by the race classification"),
+                Next ? Next->Id : FString(), ExpectedNextChapter);
+            if (!Test->TestTrue(TEXT("PIE teardown detaches the temporary save fixture"),
+                Ownership->InitializeProfile(TEXT(""), Error)))
+            { Test->AddError(Error); return false; }
+            return true;
         }
 
         bool ValidateGrid()
         {
             if (!Test->TestEqual(TEXT("Race contains player and three real opponents"), Manager->GetRacers().Num(), 4)) return false;
             if (!Test->TestTrue(TEXT("Start enters Countdown"), Manager->GetState() == EADRaceState::Countdown)) return false;
+            if (bCareer && (!Test->TestEqual(TEXT("Career starts the authored chapter route"), Manager->GetDefinition().Id, ExpectedRaceId)
+                || !Test->TestEqual(TEXT("Career starts the authored chapter difficulty"), Manager->GetDifficultyIndex(), ExpectedDifficulty))) return false;
             GridPositions.Reset();
             TSet<AADVehiclePawn*> UniqueCars;
             for (int32 Index = 0; Index < 4; ++Index)
@@ -313,6 +448,22 @@ namespace ADRaceTests
         int32 CountdownFrames = 0;
         double Deadline;
         FString RaceId;
+        bool bCareer = false;
+        TUniquePtr<FCareerRaceSaveFixture> CareerFixture;
+        TWeakObjectPtr<UADCareerSubsystem> Career;
+        TWeakObjectPtr<UADOwnershipSubsystem> Ownership;
+        FString ExpectedChapterId;
+        FString ExpectedRaceId;
+        int32 ExpectedDifficulty = 0;
+        int64 ExpectedWinCredits = 0;
+        int64 ExpectedFinishCredits = 0;
+        int32 ExpectedRep = 0;
+        int64 StartingCredits = 0;
+        int64 ExpectedCareerCredits = 0;
+        int64 ExpectedCareerReputation = 0;
+        FString PreviousChapterId;
+        bool bExpectedCareerAdvance = false;
+        double CareerRetryInputWall = 0.;
         double PauseEndWall = 0.;
         double PausedElapsed = 0.;
         double PreviousStep = 0.;
@@ -346,6 +497,17 @@ bool FADPhysicalRaceTest::RunTest(const FString& Parameters)
     FAutomationEditorCommonUtils::LoadMap(TEXT("/Game/Velocity/Maps/L_Dockside"));
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShareable(new ADRaceTests::FRunRace(this, FCString::Atoi(*Parameters))));
+    ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADCareerRaceRewardRetryTest, "Afterdark.Runtime.CareerRaceRewardRetry",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FADCareerRaceRewardRetryTest::RunTest(const FString&)
+{
+    FAutomationEditorCommonUtils::LoadMap(TEXT("/Game/Velocity/Maps/L_Dockside"));
+    ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
+    FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShareable(new ADRaceTests::FRunRace(this, 1, TEXT(""), true)));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
     return true;
 }

@@ -7,7 +7,7 @@
 3. UnrealBuildTool/UHT and Editor automation verify compilation, data loading and the runtime behaviors covered by each test.
 4. Cooked-game runs verify packaged assets and rendering. Human handling/art/audio review, physical devices, network fault testing and performance profiling remain separate acceptance gates.
 
-The latest checked-in evidence at this audit is `Artifacts/UnrealTests/index.json`: 54 Unreal Editor cases passed, with 0 failures and 0 not-run cases. The corresponding source checks passed 157 project text files, `Test-Core.ps1` passed 971 numerical checks, and `Test-RaceRules.ps1` passed 401 race-rule checks. Read `Docs/VALIDATION.md` for the matching cooked-package report and limits; do not combine reports from different builds as if they were one test run.
+The latest workspace evidence at this audit is `Artifacts/UnrealTests/index.json`: 56 Unreal Editor cases passed, with 0 warnings, failures or not-run cases. The suite includes a live career race reward-retry path through actual keyboard Enter input and reload, in addition to its isolated transaction and race fixtures. The corresponding source checks passed 157 project text files, `Test-Core.ps1` passed 971 numerical checks, and `Test-RaceRules.ps1` passed 401 race-rule checks. Read `Docs/VALIDATION.md` for the matching cooked-package report and limits; do not combine reports from different builds as if they were one test run.
 
 ## Phase 1 manual matrix
 

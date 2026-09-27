@@ -2,7 +2,7 @@
 
 No phase is accepted by having files or a passing source scan. Each gate needs an engine build, reproducible behavior and recorded acceptance.
 
-The project has prototype source implementations across Phases 1–9, but that does not mean all phases meet their delivery gates. The latest package-matched automation result and its exact scope are recorded in `VALIDATION.md`. Production art/audio, physical-device evaluation, broader world content, whole-world performance, and online acceptance remain open.
+The project has prototype source implementations across Phases 1–9, but that does not mean all phases meet their delivery gates. The 2026-09-27 prepared package suite passed its ten bounded stages, including 56 Unreal automation cases; its exact scope and measured performance are in `VALIDATION.md`. Production art/audio, physical-device evaluation, broader world content, whole-world performance, and online acceptance remain open. No phase is production-complete solely because its prototype systems compile or pass selected automated cases.
 
 Phase 2 extends the tested Phase 1 driving foundation. Phase 1 art, physical-device and broad handling acceptance remain open and are not reclassified as complete by later feature work.
 

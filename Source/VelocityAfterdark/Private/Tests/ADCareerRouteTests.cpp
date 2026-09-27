@@ -12,6 +12,11 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "UObject/StrongObjectPtr.h"
+#if WITH_EDITOR
+#include "Editor.h"
+#include "Tests/AutomationCommon.h"
+#include "Tests/AutomationEditorCommon.h"
+#endif
 
 namespace
 {
@@ -38,6 +43,178 @@ struct FCareerContentFixture
         return FJsonSerializer::Serialize(Object.ToSharedRef(),TJsonWriterFactory<>::Create(&Text)) && Write(Name,Text);
     }
 };
+
+#if WITH_EDITOR
+struct FCareerSaveFixture
+{
+    FString Root = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Automation/CareerTransactions") /
+        FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    FString Parent = Root / TEXT("repairable_parent");
+    FString SavePath = Parent / TEXT("profile.json");
+    bool bBlockerWritten = false;
+
+    FCareerSaveFixture()
+    {
+        IFileManager::Get().MakeDirectory(*Root, true);
+        bBlockerWritten = FFileHelper::SaveStringToFile(TEXT("blocks directory creation"), *Parent);
+    }
+
+    bool RepairParent()
+    {
+        IFileManager::Get().Delete(*Parent, false, true);
+        return IFileManager::Get().MakeDirectory(*Parent, true);
+    }
+
+    ~FCareerSaveFixture()
+    {
+        for (const TCHAR* Suffix : {TEXT(""), TEXT(".bak"), TEXT(".tmp"), TEXT(".bak.tmp"), TEXT(".lock")})
+            IFileManager::Get().Delete(*(SavePath + Suffix), false, true);
+        IFileManager::Get().DeleteDirectory(*Parent, false, false);
+        IFileManager::Get().Delete(*Parent, false, true);
+        IFileManager::Get().DeleteDirectory(*Root, false, false);
+    }
+};
+
+class FCareerCommitPersistenceCommand final : public IAutomationLatentCommand
+{
+public:
+    explicit FCareerCommitPersistenceCommand(FAutomationTestBase* InTest)
+        : Test(InTest), Fixture(MakeUnique<FCareerSaveFixture>()), Deadline(FPlatformTime::Seconds() + 90.) {}
+
+    virtual bool Update() override
+    {
+        if (FPlatformTime::Seconds() > Deadline)
+        {
+            Test->AddError(TEXT("Career transaction persistence fixture timed out waiting for PIE."));
+            return true;
+        }
+        UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
+        if (!World || !World->HasBegunPlay()) return false;
+        UGameInstance* GameInstance = World->GetGameInstance();
+        auto* Career = GameInstance ? GameInstance->GetSubsystem<UADCareerSubsystem>() : nullptr;
+        auto* Ownership = GameInstance ? GameInstance->GetSubsystem<UADOwnershipSubsystem>() : nullptr;
+        if (!Career || !Ownership || !Career->IsReady() || !Ownership->IsReady()) return false;
+        if (!Test->TestTrue(TEXT("Filesystem failure fixture is present"), Fixture->bBlockerWritten)) return true;
+
+        FString Error;
+        if (!Test->TestTrue(TEXT("Career transaction uses an isolated save fixture"),
+            Ownership->InitializeProfile(Fixture->SavePath, Error)))
+        {
+            Test->AddError(Error);
+            return true;
+        }
+        if (!Test->TestEqual(TEXT("Eight chapters are loaded for the transaction path"), Career->GetChapters().Num(), 8))
+            return true;
+
+        const FADCareerChapter* First = Career->GetActiveChapter(Ownership->GetProfile());
+        if (!Test->TestNotNull(TEXT("New profile begins at the arrival chapter"), First)) return true;
+        const FString FirstChapterId = First->Id;
+        const int64 StartingCredits = Ownership->GetProfile().Credits;
+        const FString RunnerUpReceipt = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+        TArray<FADRivalRaceResult> FirstRivals;
+        FirstRivals.Add({TEXT("dax_kerr"), 1});
+        FirstRivals.Add({TEXT("ivo_renn"), 3});
+        FirstRivals.Add({TEXT("sel_arden"), 4});
+
+        if (!Test->TestFalse(TEXT("Unclassified/DNF place cannot commit a career reward"),
+            Ownership->CommitRaceResult(FGuid::NewGuid().ToString(EGuidFormats::Digits), FirstChapterId, 0, FirstRivals, Error)))
+            return true;
+        if (!Test->TestEqual(TEXT("Invalid classification leaves credits untouched"), Ownership->GetProfile().Credits, StartingCredits)
+            || !Test->TestTrue(TEXT("Invalid classification creates no reward receipt"), Ownership->GetProfile().AwardedRaceIds.IsEmpty()))
+            return true;
+
+        if (!Test->TestFalse(TEXT("A failed disk write leaves the result retryable"),
+            Ownership->CommitRaceResult(RunnerUpReceipt, FirstChapterId, 2, FirstRivals, Error))) return true;
+        if (!Test->TestTrue(TEXT("Write failure is reported"), !Error.IsEmpty())
+            || !Test->TestEqual(TEXT("Failed save does not charge the stipend"), Ownership->GetProfile().Credits, StartingCredits)
+            || !Test->TestEqual(TEXT("Failed save does not count a finish"), Ownership->GetProfile().RacesFinished, int64(0))
+            || !Test->TestTrue(TEXT("Failed save records no receipt"), Ownership->GetProfile().AwardedRaceIds.IsEmpty())) return true;
+
+        if (!Test->TestTrue(TEXT("Repair isolated parent directory"), Fixture->RepairParent())) return true;
+        if (!Test->TestTrue(TEXT("Retry commits the same finalized result and receipt"),
+            Ownership->CommitRaceResult(RunnerUpReceipt, FirstChapterId, 2, FirstRivals, Error)))
+        {
+            Test->AddError(Error);
+            return true;
+        }
+        const int64 AfterRunnerUpCredits = StartingCredits + Career->GetChapters()[0].FinishCredits;
+        if (!Test->TestEqual(TEXT("Runner-up receives only the chapter stipend"), Ownership->GetProfile().Credits, AfterRunnerUpCredits)
+            || !Test->TestEqual(TEXT("Runner-up does not gain REP"), Ownership->GetProfile().Reputation, int64(0))
+            || !Test->TestEqual(TEXT("Runner-up does not advance the chapter"), Ownership->GetProfile().CompletedChapters.Num(), 0)
+            || !Test->TestEqual(TEXT("Successful runner-up is counted once"), Ownership->GetProfile().RacesFinished, int64(1))) return true;
+
+        if (!Test->TestTrue(TEXT("Repeated receipt is an idempotent retry"),
+            Ownership->CommitRaceResult(RunnerUpReceipt, FirstChapterId, 2, FirstRivals, Error))) return true;
+        if (!Test->TestEqual(TEXT("Duplicate receipt does not duplicate stipend"), Ownership->GetProfile().Credits, AfterRunnerUpCredits)
+            || !Test->TestEqual(TEXT("Duplicate receipt does not duplicate race count"), Ownership->GetProfile().RacesFinished, int64(1))) return true;
+        if (!Test->TestTrue(TEXT("Runner-up result and rivalry survive reload"), Ownership->InitializeProfile(Fixture->SavePath, Error)))
+        {
+            Test->AddError(Error);
+            return true;
+        }
+        const FADCareerChapter* ReloadedActive = Career->GetActiveChapter(Ownership->GetProfile());
+        if (!Test->TestNotNull(TEXT("Reload retains an active chapter"), ReloadedActive)) return true;
+        const FADGarageProfile& ReloadedRunnerUp = Ownership->GetProfile();
+        const FADRivalMemory* ReloadedIvo = ReloadedRunnerUp.RivalMemories.FindByPredicate(
+            [](const FADRivalMemory& Memory) { return Memory.RivalId == TEXT("ivo_renn"); });
+        if (!Test->TestEqual(TEXT("Reload keeps current chapter retryable"), ReloadedActive->Id, FirstChapterId)
+            || !Test->TestEqual(TEXT("Reload keeps all named rivals"), ReloadedRunnerUp.RivalMemories.Num(), 3)
+            || !Test->TestNotNull(TEXT("Reload keeps Ivo's stable rival record"), ReloadedIvo)) return true;
+        if (!Test->TestEqual(TEXT("Reload keeps Ivo's win against the player"), ReloadedIvo->PlayerWins, 1)) return true;
+
+        int64 ExpectedCredits = AfterRunnerUpCredits;
+        int64 ExpectedReputation = 0;
+        FString FinalReceipt;
+        TArray<FADRivalRaceResult> WinningRivals;
+        WinningRivals.Add({TEXT("dax_kerr"), 2});
+        WinningRivals.Add({TEXT("ivo_renn"), 3});
+        WinningRivals.Add({TEXT("sel_arden"), 4});
+        for (int32 ChapterIndex = 0; ChapterIndex < Career->GetChapters().Num(); ++ChapterIndex)
+        {
+            const FADCareerChapter& Chapter = Career->GetChapters()[ChapterIndex];
+            const FADCareerChapter* Active = Career->GetActiveChapter(Ownership->GetProfile());
+            if (!Test->TestNotNull(TEXT("Winner transaction has an active chapter"), Active)) return true;
+            if (!Test->TestEqual(TEXT("Persisted progress selects the matching chapter"), Active->Id, Chapter.Id)) return true;
+            FinalReceipt = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+            if (!Test->TestTrue(FString::Printf(TEXT("Winner reward commits for chapter %s"), *Chapter.Id),
+                Ownership->CommitRaceResult(FinalReceipt, Chapter.Id, 1, WinningRivals, Error)))
+            {
+                Test->AddError(Error);
+                return true;
+            }
+            ExpectedCredits += Chapter.WinCredits;
+            ExpectedReputation += Chapter.RepReward;
+            if (!Test->TestEqual(TEXT("Winning result advances exactly one chapter"), Ownership->GetProfile().CompletedChapters.Num(), ChapterIndex + 1)
+                || !Test->TestEqual(TEXT("Winning reward balance is catalog-derived"), Ownership->GetProfile().Credits, ExpectedCredits)
+                || !Test->TestEqual(TEXT("Winning reward REP is catalog-derived"), Ownership->GetProfile().Reputation, ExpectedReputation)) return true;
+
+            if (!Test->TestTrue(TEXT("Career progress reloads after each committed chapter"), Ownership->InitializeProfile(Fixture->SavePath, Error)))
+            {
+                Test->AddError(Error);
+                return true;
+            }
+        }
+
+        const FADGarageProfile& FinalProfile = Ownership->GetProfile();
+        if (!Test->TestNull(TEXT("Completed career has no active chapter"), Career->GetActiveChapter(FinalProfile))
+            || !Test->TestEqual(TEXT("All eight winners earn Afterdark Champion REP"), FinalProfile.Reputation, int64(8000))
+            || !Test->TestEqual(TEXT("Runner-up plus eight winners are counted"), FinalProfile.RacesFinished, int64(9))
+            || !Test->TestEqual(TEXT("Only eight winning results increment race wins"), FinalProfile.RaceWins, int64(8))
+            || !Test->TestEqual(TEXT("Every finalized result has a durable unique receipt"), FinalProfile.AwardedRaceIds.Num(), 9)
+            || !Test->TestEqual(TEXT("Final rank is persisted and derived"), Career->GetRankName(FinalProfile.Reputation), FString(TEXT("Afterdark Champion"))))
+            return true;
+
+        if (!Test->TestTrue(TEXT("Final victory can be safely retried after reload"),
+            Ownership->CommitRaceResult(FinalReceipt, Career->GetChapters().Last().Id, 1, WinningRivals, Error))) return true;
+        return Test->TestEqual(TEXT("Final duplicate does not change durable race count"), Ownership->GetProfile().RacesFinished, int64(9));
+    }
+
+private:
+    FAutomationTestBase* Test;
+    TUniquePtr<FCareerSaveFixture> Fixture;
+    double Deadline;
+};
+#endif
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADCareerRouteCatalogTest,"Afterdark.Data.RaceCatalog",
@@ -231,4 +408,17 @@ bool FADCareerProgressionRouteTest::RunTest(const FString&)
     TestEqual(TEXT("Rejected reference preserves current valid first chapter"),Career->GetChapters()[0].RaceId,FString(TEXT("dockside_circuit_v1")));
     return true;
 }
+
+#if WITH_EDITOR
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADCareerCommitPersistenceTest,"Afterdark.Career.CommitPersistence",
+    EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
+bool FADCareerCommitPersistenceTest::RunTest(const FString&)
+{
+    FAutomationEditorCommonUtils::LoadMap(TEXT("/Game/Velocity/Maps/L_Dockside"));
+    ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
+    FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShareable(new FCareerCommitPersistenceCommand(this)));
+    ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+    return true;
+}
+#endif
 #endif

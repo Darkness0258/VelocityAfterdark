@@ -21,7 +21,7 @@ bool FinitePoint(FVector2D Point)
     return FMath::IsFinite(Point.X) && FMath::IsFinite(Point.Y);
 }
 
-bool ReadNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, double Minimum, double Maximum, double& Out)
+bool ReadRoadNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, double Minimum, double Maximum, double& Out)
 {
     const auto Value = Object->TryGetField(Name);
     return Value.IsValid() && Value->Type == EJson::Number && Value->TryGetNumber(Out)
@@ -61,8 +61,8 @@ bool ReadCatalog(const FString& Path, bool bDistrict, TArray<FADRoadNetworkSegme
         || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
         return Fail(TEXT("requires a valid JSON object between 1 and 131072 bytes."));
     double Schema = 0., Width = 0.;
-    if (!ReadNumber(Object, TEXT("schemaVersion"), 1., 1., Schema)
-        || !ReadNumber(Object, TEXT("roadWidth"), 1200., 4000., Width)
+    if (!ReadRoadNumber(Object, TEXT("schemaVersion"), 1., 1., Schema)
+        || !ReadRoadNumber(Object, TEXT("roadWidth"), 1200., 4000., Width)
         || !ReadRoadPointValue(Object, TEXT("groundHalfExtent"), OutBounds)
         || OutBounds.X < 2000. || OutBounds.Y < 2000. || OutBounds.X > MaximumCoordinateCm || OutBounds.Y > MaximumCoordinateCm)
         return Fail(TEXT("invalid schema, road width or finite ground bounds."));
