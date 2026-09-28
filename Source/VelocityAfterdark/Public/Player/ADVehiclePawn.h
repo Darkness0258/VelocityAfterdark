@@ -123,5 +123,9 @@ private:
     float ImpactCameraStrength = 0.f;
     float ImpactCameraSide = 0.f;
     float ImpactCameraForward = 0.f;
+    float SafeRecoverySampleSeconds = 0.f;
+    float StrandedSeconds = 0.f;
+    float RecoveryCooldownSeconds = 0.f;
+    FVector StrandedStartPosition = FVector::ZeroVector;
     FString PresentedBodyStyle;
 };

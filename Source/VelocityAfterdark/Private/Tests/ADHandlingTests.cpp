@@ -18,7 +18,7 @@
 
 namespace ADHandlingTests
 {
-    enum class EScenario : uint8 { HighSpeed, Steering, Barrier, Curb, Wheelspin, TractionControl };
+    enum class EScenario : uint8 { HighSpeed, Steering, Barrier, StrandedRecovery, Curb, Wheelspin, TractionControl };
 
     /**
      * These are bounded fixtures, not a claimed lap. Each settles the real chassis,
@@ -112,6 +112,7 @@ namespace ADHandlingTests
             case EScenario::HighSpeed: return UpdateHighSpeed(World, Elapsed);
             case EScenario::Steering: return UpdateSteering(World, Elapsed);
             case EScenario::Barrier: return UpdateBarrier(World, Elapsed);
+            case EScenario::StrandedRecovery: return UpdateStrandedRecovery(World,Elapsed);
             case EScenario::Curb: return UpdateCurb(World, Elapsed);
             case EScenario::Wheelspin: return UpdateWheelspin(World,Elapsed,false);
             case EScenario::TractionControl: return UpdateWheelspin(World,Elapsed,true);
@@ -122,7 +123,8 @@ namespace ADHandlingTests
     private:
         bool CreateFixture(UWorld* World)
         {
-            const bool bFast = Scenario == EScenario::HighSpeed || Scenario == EScenario::Barrier;
+            const bool bFast = Scenario == EScenario::HighSpeed || Scenario == EScenario::Barrier
+                || Scenario == EScenario::StrandedRecovery;
             const bool bLaunchFixture=Scenario==EScenario::Wheelspin || Scenario==EScenario::TractionControl;
             Origin = FVector(Scenario == EScenario::HighSpeed ? -25000. : -15000., 400.,
                 Vehicle->GetActorLocation().Z);
@@ -130,7 +132,15 @@ namespace ADHandlingTests
             Vehicle->GetPhysics()->ResetState();
             Chassis->SetPhysicsLinearVelocity(FVector::ZeroVector);
             Chassis->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
-            Vehicle->SetActorLocationAndRotation(Origin, FRotator::ZeroRotator, false, nullptr,
+            if (Scenario==EScenario::StrandedRecovery)
+            {
+                if (!Vehicle->PlaceForRace(FTransform(FRotator::ZeroRotator,Origin)))
+                {
+                    Test->AddError(TEXT("Unable to establish a safe recovery point for the stranding fixture."));
+                    return false;
+                }
+            }
+            else Vehicle->SetActorLocationAndRotation(Origin, FRotator::ZeroRotator, false, nullptr,
                 ETeleportType::TeleportPhysics);
             if (!bLaunchFixture)
             {
@@ -145,10 +155,10 @@ namespace ADHandlingTests
             MinimumForwardSpeedCm = SeedSpeedCm;
             PeakSpeedKmh = SeedSpeedCm * .036;
 
-            if (Scenario == EScenario::Barrier || Scenario == EScenario::Curb)
+            if (Scenario == EScenario::Barrier || Scenario == EScenario::StrandedRecovery || Scenario == EScenario::Curb)
             {
                 ObstacleX = Origin.X + 2000.;
-                const bool bBarrier = Scenario == EScenario::Barrier;
+                const bool bBarrier = Scenario == EScenario::Barrier || Scenario == EScenario::StrandedRecovery;
                 Obstacle = World->SpawnActor<AActor>();
                 if (!Obstacle.IsValid())
                 {
@@ -265,6 +275,61 @@ namespace ADHandlingTests
             return false;
         }
 
+        bool UpdateStrandedRecovery(UWorld* World,float Elapsed)
+        {
+            if (Stage==2 && Elapsed>=2.f)
+            {
+                Test->TestTrue(TEXT("Impact leaves the chassis blocked before the static barrier"),
+                    Vehicle->GetActorLocation().X < ObstacleX && MaximumX <= ObstacleX+30.);
+                // Settle the post-impact car against the same wall so this
+                // regression isolates deadlock detection from a normal rebound
+                // still carrying enough momentum to escape by itself.
+                Vehicle->PlaceForRace(FTransform(FRotator::ZeroRotator,Origin));
+                const FVector WallContactPosition(ObstacleX-Chassis->GetScaledBoxExtent().X-10.f,Origin.Y,Origin.Z);
+                Vehicle->SetActorLocationAndRotation(WallContactPosition,FRotator::ZeroRotator,false,nullptr,
+                    ETeleportType::TeleportPhysics);
+                Chassis->SetPhysicsLinearVelocity(FVector::ZeroVector);
+                Chassis->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
+                Chassis->WakeAllRigidBodies();
+                StrandedPosition=Vehicle->GetActorLocation();
+                Vehicle->GetPhysics()->SetControls(1.f,0.f,0.f,false);
+                SetStage(4,World);
+                return false;
+            }
+            if (Stage==4)
+            {
+                if (FVector::Dist2D(Vehicle->GetActorLocation(),Origin)<150.)
+                {
+                    Test->TestTrue(TEXT("Sustained throttle while trapped triggers automatic recovery to the last safe pose"),
+                        FVector::Dist2D(Vehicle->GetActorLocation(),StrandedPosition)>1000.);
+                    SetStage(5,World);
+                    return false;
+                }
+                if (Elapsed>6.5f)
+                {
+                    const FADVehicleTelemetry& State=Vehicle->GetPhysics()->GetTelemetry();
+                    Test->AddInfo(FString::Printf(TEXT("Stranded diagnostics: driving=%s simulating=%s throttle=%.2f speed=%.2f cm/s position=%s wall=%.1f cm deltaFromOrigin=%.1f cm."),
+                        Vehicle->IsDrivingEnabled()?TEXT("yes"):TEXT("no"),Chassis->IsSimulatingPhysics()?TEXT("yes"):TEXT("no"),
+                        State.Throttle,Chassis->GetPhysicsLinearVelocity().Size2D(),*Vehicle->GetActorLocation().ToCompactString(),
+                        ObstacleX,FVector::Dist2D(Vehicle->GetActorLocation(),Origin)));
+                    return Fail(TEXT("A car held on full throttle against a blocking wall was not recovered."));
+                }
+                return false;
+            }
+            if (Stage==5 && Elapsed>=1.5f)
+            {
+                Test->TestTrue(TEXT("Automatic recovery keeps the car drivable"),Vehicle->IsDrivingEnabled());
+                Test->TestTrue(TEXT("Automatic recovery leaves the car upright and settled"),
+                    Vehicle->GetActorUpVector().Z>.7f
+                    && Vehicle->GetPhysics()->GetTelemetry().GroundedWheels==4);
+                Test->TestTrue(TEXT("Automatic recovery clears the impact momentum"),
+                    Chassis->GetPhysicsLinearVelocity().Size()<250.f
+                    && Chassis->GetPhysicsAngularVelocityInRadians().Size()<.5f);
+                return Finish();
+            }
+            return false;
+        }
+
         bool UpdateCurb(UWorld* World, float Elapsed)
         {
             if (Elapsed < 3.5f) return false;
@@ -305,8 +370,12 @@ namespace ADHandlingTests
         {
             DestroyObstacle();
             Vehicle->ResetVehicle();
-            Test->TestTrue(TEXT("Recovery returns to the original start area"),
-                FVector::Dist(Vehicle->GetActorLocation(), InitialPosition) < 150.);
+            Test->AddInfo(FString::Printf(TEXT("Recovery destination=%s fixture-start=%s speed=%.1f cm/s up=%.3f grounded=%d."),
+                *Vehicle->GetActorLocation().ToCompactString(),*Origin.ToCompactString(),
+                Chassis->GetPhysicsLinearVelocity().Size(),Vehicle->GetActorUpVector().Z,
+                Vehicle->GetPhysics()->GetTelemetry().GroundedWheels));
+            Test->TestTrue(TEXT("Recovery returns to the most recent safe fixture area"),
+                FVector::Dist(Vehicle->GetActorLocation(), Origin) < 250.);
             Test->TestTrue(TEXT("Recovery clears linear and angular momentum"),
                 Chassis->GetPhysicsLinearVelocity().IsNearlyZero(.1)
                 && Chassis->GetPhysicsAngularVelocityInRadians().IsNearlyZero(.01));
@@ -385,6 +454,7 @@ namespace ADHandlingTests
         FVector Origin = FVector::ZeroVector;
         FVector BrakeOrigin = FVector::ZeroVector;
         FVector RecoveryOrigin = FVector::ZeroVector;
+        FVector StrandedPosition = FVector::ZeroVector;
         double SeedSpeedCm = 0.;
         double ObstacleX = 0.;
         double MaximumX = 0.;
@@ -411,7 +481,7 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FADHandlingRegressionTest, "Afterdark.Runtime.
 
 void FADHandlingRegressionTest::GetTests(TArray<FString>& OutNames, TArray<FString>& OutCommands) const
 {
-    for (const TCHAR* Scenario : {TEXT("HighSpeed"), TEXT("Steering"), TEXT("Barrier"), TEXT("Curb"),
+    for (const TCHAR* Scenario : {TEXT("HighSpeed"), TEXT("Steering"), TEXT("Barrier"), TEXT("StrandedRecovery"), TEXT("Curb"),
         TEXT("Wheelspin"),TEXT("TractionControl")})
     {
         for (int32 Rate : {30, 60, 120})
@@ -441,6 +511,7 @@ bool FADHandlingRegressionTest::RunTest(const FString& Parameters)
     if (ScenarioName == TEXT("HighSpeed")) Scenario = EScenario::HighSpeed;
     else if (ScenarioName == TEXT("Steering")) Scenario = EScenario::Steering;
     else if (ScenarioName == TEXT("Barrier")) Scenario = EScenario::Barrier;
+    else if (ScenarioName == TEXT("StrandedRecovery")) Scenario = EScenario::StrandedRecovery;
     else if (ScenarioName == TEXT("Curb")) Scenario = EScenario::Curb;
     else if (ScenarioName == TEXT("Wheelspin")) Scenario=EScenario::Wheelspin;
     else if (ScenarioName == TEXT("TractionControl")) Scenario=EScenario::TractionControl;

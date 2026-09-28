@@ -119,7 +119,7 @@ switch ($Action) {
         $expectedTests = @('Afterdark.Data.VehicleDefinition', 'Afterdark.Data.RaceDefinition', 'Afterdark.Runtime.InputAndCamera')
         foreach ($rate in @(30, 60, 120)) {
             $expectedTests += "Afterdark.Runtime.DriveAndBrake.${rate}Hz"
-            foreach ($scenario in @('HighSpeed', 'Steering', 'Barrier', 'Curb', 'Wheelspin', 'TractionControl')) {
+            foreach ($scenario in @('HighSpeed', 'Steering', 'Barrier', 'StrandedRecovery', 'Curb', 'Wheelspin', 'TractionControl')) {
                 $expectedTests += "Afterdark.Runtime.Handling.$scenario.${rate}Hz"
             }
         }
@@ -153,7 +153,9 @@ switch ($Action) {
         if ($report.failed -gt 0 -or $report.notRun -gt 0) {
             throw "Unreal automation has failed or unrun tests. Inspect $reportPath"
         }
-        Write-Host "AFTERDARK_TESTS_OK: $($report.succeeded) passed, $($report.failed) failed. Report: $reportPath"
+        # Complex latent automation cases are reported per-test with state=Success,
+        # while Unreal's aggregate succeeded counter can remain zero for PIE tests.
+        Write-Host "AFTERDARK_TESTS_OK: $($expectedRun.Count) passed, 0 failed. Report: $reportPath"
     }
     'Render' {
         Build-Editor

@@ -201,6 +201,8 @@ private:
             Test->TestTrue(TEXT("Scenery streams within the cell budget"),Regions->GetLoadedCellCount()>0 && Regions->GetLoadedCellCount()<=24);
             Test->TestTrue(TEXT("District cells instantiate imported Kenney building meshes"),
                 Regions->GetLoadedKenneyInstanceCount()>0);
+            Test->TestTrue(TEXT("Streamed scenery has physics-blocking proxies for vehicles"),
+                Regions->GetLoadedCollisionProxyCount()>0);
             Stage=4; StageTime=World->GetTimeSeconds(); return false;
         }
         if (Stage==4 && Elapsed>=31.)

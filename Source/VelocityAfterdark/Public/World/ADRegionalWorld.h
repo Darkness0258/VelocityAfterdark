@@ -36,6 +36,7 @@ public:
     int32 GetLoadedCellCount() const { return LoadedCellCount; }
     int32 GetTotalCellCount() const { return Cells.Num(); }
     int32 GetLoadedKenneyInstanceCount() const;
+    int32 GetLoadedCollisionProxyCount() const;
     float GetRoadLengthMeters() const { return RoadLengthMeters; }
     FVector2D GetGroundHalfExtent() const { return GroundHalfExtent; }
     const TArray<FADRegionalRoad>& GetRoadSegments() const { return Roads; }
@@ -71,6 +72,8 @@ private:
     UMaterialInstanceDynamic* MakeMaterial(const TCHAR* Name, const TCHAR* Asset,
         FLinearColor Color, float Roughness, float Metallic);
     void AddResident(FName Material, FVector Position, FVector Size, FRotator Rotation = FRotator::ZeroRotator);
+    void AddResidentCollision(FName Surface, FVector Position, FVector Size,
+        FRotator Rotation = FRotator::ZeroRotator);
     void AddResidentMesh(FName BatchKey, UStaticMesh* Mesh, FVector Position, FVector Size,
         FRotator Rotation = FRotator::ZeroRotator);
 
@@ -87,6 +90,7 @@ private:
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> ConstructionBarrier;
     UPROPERTY(Transient) TMap<FName,TObjectPtr<UMaterialInterface>> Materials;
     UPROPERTY(Transient) TMap<FName,TObjectPtr<UInstancedStaticMeshComponent>> ResidentBatches;
+    UPROPERTY(Transient) TMap<FName,TObjectPtr<UInstancedStaticMeshComponent>> ResidentCollisionBatches;
     UPROPERTY(Transient) TArray<TObjectPtr<UInstancedStaticMeshComponent>> ActiveComponents;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> WetAsphalt;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> Windows;

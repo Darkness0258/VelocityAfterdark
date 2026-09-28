@@ -570,6 +570,10 @@ void AADVehiclePawn::SetDrivingEnabled(bool bEnabled)
 void AADVehiclePawn::ResetVehicle()
 {
     if (!HasAuthority() || bInGarage) return;
+    StrandedSeconds = 0.f;
+    SafeRecoverySampleSeconds = 0.f;
+    RecoveryCooldownSeconds = 8.f;
+    StrandedStartPosition = FVector::ZeroVector;
     Chassis->SetSimulatePhysics(true);
     Chassis->SetPhysicsLinearVelocity(FVector::ZeroVector);
     Chassis->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
@@ -672,10 +676,91 @@ void AADVehiclePawn::Tick(float DeltaSeconds)
     else VehiclePhysics->AdvanceRemoteWheels(DeltaSeconds);
     const auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>();
     const FVector2D Bounds=Mode ? Mode->GetDriveBounds()+FVector2D(1000,1000) : FVector2D(101000,81000);
-    if (HasAuthority() && !bInGarage && Chassis->IsSimulatingPhysics() && (Position.Z < -1500 || FMath::Abs(Position.X)>Bounds.X || FMath::Abs(Position.Y)>Bounds.Y))
+    if (HasAuthority() && !bInGarage && Chassis->IsSimulatingPhysics())
     {
-        if (OnRecoveryRequested.IsBound()) OnRecoveryRequested.Broadcast(this);
-        else ResetVehicle();
+        const FVector LinearVelocity = Chassis->GetPhysicsLinearVelocity();
+        const float SpeedCmPerSecond = LinearVelocity.Size2D();
+        const FADVehicleTelemetry& Telemetry = VehiclePhysics->GetTelemetry();
+        RecoveryCooldownSeconds = FMath::Max(0.f, RecoveryCooldownSeconds - DeltaSeconds);
+
+        // Keep a nearby, upright, grounded recovery pose while the player is
+        // making real progress. A collision at speed then cannot leave recovery
+        // pointing back to the original spawn or at the impact location.
+        const bool bSafeToRecordRecovery = bDrivingEnabled && !bRaceOpponent && VehiclePhysics->IsReady()
+            && Telemetry.GroundedWheels >= 3 && SpeedCmPerSecond > 500.f
+            && GetActorUpVector().Z > .7f
+            && Chassis->GetPhysicsAngularVelocityInRadians().Size() < 1.5f
+            && Position.Z > -100.f && Position.Z < 2000.f
+            && FMath::Abs(Position.X) < Bounds.X && FMath::Abs(Position.Y) < Bounds.Y;
+        if (bSafeToRecordRecovery)
+        {
+            SafeRecoverySampleSeconds += DeltaSeconds;
+            if (SafeRecoverySampleSeconds >= 1.5f)
+            {
+                const FCollisionQueryParams GroundQuery(SCENE_QUERY_STAT(ADSafeRecoveryGround),false,this);
+                FHitResult GroundHit;
+                const FVector TraceStart=Position+FVector::UpVector*200.f;
+                const FVector TraceEnd=Position-FVector::UpVector*2000.f;
+                if (GetWorld()->LineTraceSingleByChannel(GroundHit,TraceStart,TraceEnd,ECC_Visibility,GroundQuery))
+                {
+                    const FADVehicleDefinition& Definition=VehiclePhysics->GetDefinition();
+                    const float SuspensionSagCm=Definition.SpringRateNPerM>0.f
+                        ? Definition.MassKg*9.81f/(4.f*Definition.SpringRateNPerM)*100.f : 0.f;
+                    FVector RecoveryLocation=Position;
+                    // Impact snapshots can capture a compressed suspension pose;
+                    // rebase checkpoints on the loaded tire height instead.
+                    RecoveryLocation.Z=GroundHit.ImpactPoint.Z
+                        +(Definition.WheelRadiusM+Definition.SuspensionRestLengthM)*100.f-SuspensionSagCm;
+                    const FCollisionQueryParams ClearanceQuery(SCENE_QUERY_STAT(ADSafeRecoveryClearance),false,this);
+                    const FVector RecoveryExtent=Chassis->GetScaledBoxExtent()+FVector(25.f,25.f,8.f);
+                    if (!GetWorld()->OverlapBlockingTestByChannel(RecoveryLocation,GetActorQuat(),ECC_PhysicsBody,
+                        FCollisionShape::MakeBox(RecoveryExtent),ClearanceQuery))
+                    {
+                        RecoveryTransform=FTransform(GetActorRotation(),RecoveryLocation,GetActorScale3D());
+                    }
+                }
+                SafeRecoverySampleSeconds = 0.f;
+            }
+        }
+        else SafeRecoverySampleSeconds = 0.f;
+
+        const float ForwardSpeedCmPerSecond=FMath::Abs(FVector::DotProduct(LinearVelocity,GetActorForwardVector()));
+        const bool bActivelyStranded = bDrivingEnabled && !bRaceOpponent && VehiclePhysics->IsReady()
+            && Telemetry.Throttle > .45f && ForwardSpeedCmPerSecond < 600.f;
+        if (!bActivelyStranded)
+        {
+            StrandedSeconds=0.f;
+            StrandedStartPosition=Position;
+        }
+        else
+        {
+            if (StrandedSeconds <= 0.f) StrandedStartPosition=Position;
+            // A car can creep or slide against a wall while its driven wheels
+            // remain pinned. Measure actual escape progress, not total velocity.
+            if (FVector::Dist2D(Position,StrandedStartPosition)>500.f)
+            {
+                StrandedSeconds=0.f;
+                StrandedStartPosition=Position;
+            }
+            else StrandedSeconds+=DeltaSeconds;
+        }
+
+        // Give normal traffic stops and a driver's first reverse attempt time to
+        // work. Only recover after sustained throttle with almost no movement.
+        if (RecoveryCooldownSeconds <= 0.f && StrandedSeconds >= 4.5f)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Vehicle stranded under throttle at %s; requesting safe recovery."), *Position.ToCompactString());
+            StrandedSeconds = 0.f;
+            RecoveryCooldownSeconds = 12.f;
+            if (OnRecoveryRequested.IsBound()) OnRecoveryRequested.Broadcast(this);
+            else ResetVehicle();
+        }
+
+        if (Position.Z < -350.f || FMath::Abs(Position.X) > Bounds.X || FMath::Abs(Position.Y) > Bounds.Y)
+        {
+            if (OnRecoveryRequested.IsBound()) OnRecoveryRequested.Broadcast(this);
+            else ResetVehicle();
+        }
     }
     UpdatePresentation(DeltaSeconds);
 }

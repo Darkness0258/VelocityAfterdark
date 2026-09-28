@@ -419,7 +419,9 @@ void AADDistrict::BuildRoads()
             {
                 AddBox(TEXT("M_RoadYellow"), FVector(P + Side * (Sign * 10), 1), FVector(850, 8, 1), false, Yaw);
                 AddBox(TEXT("M_RoadMarking"), FVector(P + Side * (Sign * RoadWidth * .25), 1), FVector(300, 12, 1), false, Yaw);
-                AddBox(TEXT("M_Concrete"), FVector(P + Side * (Sign * (RoadWidth * .5 + 260)), 7), FVector(1000, 500, 24), true, Yaw);
+                // Keep the driveable shoulder close to road height. The former
+                // 19 cm exposed step snagged low chassis after side impacts.
+                AddBox(TEXT("M_Concrete"), FVector(P + Side * (Sign * (RoadWidth * .5 + 260)), -1), FVector(1000, 500, 10), true, Yaw);
                 AddBox(TEXT("M_RoadMarking"), FVector(P + Side * (Sign * (RoadWidth * .5 - 35)), 1), FVector(1000, 10, 1), false, Yaw);
             }
         }
@@ -604,6 +606,7 @@ void AADDistrict::BuildStreetFurniture()
                 const float LampYaw=Heading+(Sign>0.f ? 180.f : 0.f);
                 AddDistrictMesh(StreetLampMeshes[LampIndex],FVector((Pole+Lamp)*.5,520.f),
                     FVector(70.f,260.f,1040.f),LampYaw);
+                AddBox(TEXT("M_Concrete"),FVector((Pole+Lamp)*.5,520.f),FVector(70.f,260.f,1040.f),true,LampYaw);
                 const bool bWarm = P.Y <= 0;
                 AddBox(bWarm ? TEXT("M_WindowWarm") : TEXT("M_EmissiveWhite"), FVector(Lamp, 1030), FVector(100, 80, 16));
                 Lamps.Add({ FVector(Lamp, 1000), bWarm });
@@ -634,6 +637,7 @@ void AADDistrict::BuildStreetFurniture()
             const FVector2D Position=Endpoint+Right*(RoadWidth*.5+220.f)-Approach*450.f;
             const float SignalYaw=FMath::RadiansToDegrees(FMath::Atan2(Approach.Y,Approach.X));
             AddDistrictMesh(TrafficSignalMesh,FVector(Position,260.f),FVector(70.f,70.f,520.f),SignalYaw);
+            AddBox(TEXT("M_Concrete"),FVector(Position,260.f),FVector(70.f,70.f,520.f),true,SignalYaw);
         }
     }
     // Light objects have a hard bound, independent of scenery density. Emissive
@@ -677,7 +681,12 @@ void AADDistrict::BuildStreetFurniture()
     };
     int32 AddedCars = 0;
     for (const FVector& Position : ParkedPositions)
+    {
         AddedCars += ParkedCityCars->AddInstance(FTransform(FRotator::ZeroRotator, Position, FVector::OneVector)) >= 0;
+        // Background cars remain instanced visual art; one cheap box per car
+        // gives them predictable collision without relying on imported meshes.
+        AddBox(TEXT("M_Metal"),Position+FVector(0.f,0.f,78.f),FVector(450.f,195.f,145.f),true);
+    }
     const int32 ExpectedCarCount = static_cast<int32>(UE_ARRAY_COUNT(ParkedPositions));
     if (AddedCars == ExpectedCarCount)
     {
