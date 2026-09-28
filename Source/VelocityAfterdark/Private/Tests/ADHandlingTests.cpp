@@ -14,6 +14,7 @@
 #include "Tests/AutomationCommon.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "Vehicle/ADVehiclePhysicsComponent.h"
+#include "Vehicle/ADVehicleEffectsComponent.h"
 
 namespace ADHandlingTests
 {
@@ -240,6 +241,12 @@ namespace ADHandlingTests
         {
             if (MaximumX > ObstacleX + 30.)
                 return Fail(TEXT("CCD regression: chassis centre passed through the thin static barrier."));
+            if (!bImpactVfxObserved && Vehicle->GetEffects()->GetImpactPresentationCount()>0)
+            {
+                Test->TestTrue(TEXT("High-speed impact activates multiple pooled animated spark streaks"),
+                    Vehicle->GetEffects()->GetActiveImpactSparkCount()>=2);
+                bImpactVfxObserved=true;
+            }
             if (Elapsed < 2.f) return false;
             Test->AddInfo(FString::Printf(TEXT("Barrier %d Hz: seed=200 km/h, wall thickness=10 cm, "
                 "closest centre=%.2f cm before wall, minimum forward velocity=%.2f km/h, "
@@ -248,6 +255,12 @@ namespace ADHandlingTests
             Test->TestTrue(TEXT("Real chassis reaches the wall rather than stopping short"), MaximumX > ObstacleX - 500.);
             Test->TestTrue(TEXT("Thin wall stops the forward rigid-body motion"), MinimumForwardSpeedCm < 500.);
             Test->TestTrue(TEXT("Barrier response does not add excessive kinetic speed"), PeakSpeedKmh < 240.);
+            Test->TestTrue(TEXT("A real barrier impact applies vehicle damage"),Vehicle->GetEffects()->GetHealth()<1.f);
+            Test->TestTrue(TEXT("A real barrier impact reaches the presentation event"),
+                Vehicle->GetEffects()->GetImpactPresentationCount()>0);
+            Test->TestTrue(TEXT("Impact visuals use a preallocated bounded spark pool"),
+                Vehicle->GetEffects()->GetImpactSparkPoolSize()>=4);
+            Test->TestTrue(TEXT("The high-speed collision produced its transient spark burst"),bImpactVfxObserved);
             BeginRecovery(World);
             return false;
         }
@@ -388,6 +401,7 @@ namespace ADHandlingTests
         double PreviousStep = 0.;
         bool bPreviousFixed = false;
         bool bChangedTimeStep = false;
+        bool bImpactVfxObserved=false;
         bool bCleaned = false;
     };
 }

@@ -1,4 +1,5 @@
 #include "World/ADDistrict.h"
+#include "World/ADPhysicalSurface.h"
 
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -336,6 +337,11 @@ UHierarchicalInstancedStaticMeshComponent* AADDistrict::GetBatch(FName MaterialN
     Batch->SetStaticMesh(MeshOverride ? MeshOverride : bCylinder ? Cylinder.Get() : Cube.Get());
     if (Materials.Contains(MaterialName)) Batch->SetMaterial(0, Materials.FindChecked(MaterialName));
     Batch->SetCollisionProfileName(bCollision ? TEXT("BlockAll") : TEXT("NoCollision"));
+    if (bCollision)
+    {
+        const FName PhysicalName(*FString::Printf(TEXT("PM_%s"),*MaterialName.ToString()));
+        Batch->SetPhysMaterialOverride(ADSurfacePhysics::CreatePhysicalMaterial(this,PhysicalName,MaterialName));
+    }
     Batch->SetGenerateOverlapEvents(false);
     Batch->SetCanEverAffectNavigation(false);
     Batch->SetCastShadow(bCollision || MeshOverride != nullptr);

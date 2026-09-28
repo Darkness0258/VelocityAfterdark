@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Misc/Paths.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogADVehiclePhysics, Log, All);
 
@@ -33,7 +34,7 @@ bool UADVehiclePhysicsComponent::Initialize(UPrimitiveComponent* InChassis)
     Chassis->SetMassOverrideInKg(NAME_None, Definition.MassKg, true);
     Chassis->SetCenterOfMass(Definition.CenterOfMassOffsetCm);
     WheelQuery = FCollisionQueryParams(SCENE_QUERY_STAT(ADVehicleWheel), false, GetOwner());
-    WheelQuery.bReturnPhysicalMaterial = false;
+    WheelQuery.bReturnPhysicalMaterial = true;
     bReady = true;
     ResetState();
     UE_LOG(LogADVehiclePhysics, Display, TEXT("Loaded %s, %.0f kg, %d gears."), *Definition.Name, Definition.MassKg, Definition.GearRatios.Num());
@@ -297,6 +298,7 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
     const float QuarterMassKg = Definition.MassKg * .25f;
     Telemetry.GroundedWheels = 0;
     Telemetry.Slip = 0.f;
+    float LowestSurfaceGripScale = 1.f;
 
     for (int32 Index = 0; Index < 4; ++Index)
     {
@@ -338,8 +340,12 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
             WheelForwardSpeedMps = static_cast<float>(FVector::DotProduct(ContactVelocity, TireForward));
             LateralSpeedMps = static_cast<float>(FVector::DotProduct(ContactVelocity, TireRight));
             SlipAngle = static_cast<float>(ADVehicleMath::SlipAngleRadians(WheelForwardSpeedMps, LateralSpeedMps));
+            const UPhysicalMaterial* Surface = Hit.PhysMaterial.Get();
+            const float SurfaceGripScale = Surface
+                ? static_cast<float>(ADVehicleMath::SurfaceGripScale(Surface->Friction)) : 1.f;
+            LowestSurfaceGripScale = FMath::Min(LowestSurfaceGripScale,SurfaceGripScale);
             CapacityN = static_cast<float>(ADVehicleMath::TireCapacityN(SuspensionN * FVector::DotProduct(Up, Hit.ImpactNormal),
-                ReferenceLoadN, Definition.TireFriction * FMath::Lerp(1.f,.72f,RoadWetness), Definition.TireLoadSensitivity));
+                ReferenceLoadN, Definition.TireFriction * SurfaceGripScale * FMath::Lerp(1.f,.72f,RoadWetness), Definition.TireLoadSensitivity));
             const bool bRearHandbrake = bHandbrake && Index >= 2;
             if (bRearHandbrake) CapacityN *= .65f;
             // Limit lateral correction by available lateral momentum for low-speed
@@ -401,6 +407,7 @@ void UADVehiclePhysicsComponent::TickComponent(float DeltaTime, ELevelTick TickT
         }
     }
     Telemetry.SpeedKmh = SpeedMps * 3.6f;
+    Telemetry.SurfaceGripScale = Telemetry.GroundedWheels > 0 ? LowestSurfaceGripScale : 0.f;
     Telemetry.StabilityIntervention=FMath::Clamp(FMath::Abs(StabilityBrakeN)/3500.f,0.f,1.f);
     Telemetry.Rpm = CurrentRpm;
     Telemetry.Gear = CurrentGear;

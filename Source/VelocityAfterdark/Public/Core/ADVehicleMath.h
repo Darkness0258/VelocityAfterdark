@@ -95,6 +95,16 @@ inline double TireCapacityN(double NormalLoadN, double ReferenceLoadN, double Fr
     return NormalLoadN * Clamp(Friction, 0.0, 4.0) * LoadFactor;
 }
 
+// Converts an Unreal physical-material friction value into a bounded multiplier
+// for the custom tire model. 0.82 is the authored asphalt reference used by the
+// city collision surfaces; missing material data retains neutral grip.
+inline double SurfaceGripScale(double SurfaceFriction, double ReferenceFriction = 0.82)
+{
+    if (!std::isfinite(SurfaceFriction)) return 1.0;
+    const double Reference = Clamp(ReferenceFriction, 0.1, 2.0);
+    return Clamp(SurfaceFriction / Reference, 0.2, 1.35);
+}
+
 struct TireForce
 {
     double LongitudinalN;

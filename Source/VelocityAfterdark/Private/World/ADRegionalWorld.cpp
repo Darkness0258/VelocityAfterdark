@@ -1,4 +1,5 @@
 #include "World/ADRegionalWorld.h"
+#include "World/ADPhysicalSurface.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -300,6 +301,11 @@ UInstancedStaticMeshComponent* AADRegionalWorld::CreateBatch(FName Name, UMateri
     Batch->SetCanEverAffectNavigation(false);
     Batch->SetCollisionEnabled(bCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
     if (bCollision) Batch->SetCollisionProfileName(TEXT("BlockAll"));
+    if (bCollision)
+    {
+        const FName PhysicalName(*FString::Printf(TEXT("PM_%s"),*Name.ToString()));
+        Batch->SetPhysMaterialOverride(ADSurfacePhysics::CreatePhysicalMaterial(this,PhysicalName,Name));
+    }
     Batch->SetCastShadow(!bCollision);
     Batch->RegisterComponent();
     return Batch;

@@ -3,10 +3,12 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Core/ADVehicleMath.h"
 #include "Vehicle/ADVehicleDefinition.h"
+#include "World/ADPhysicalSurface.h"
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformTime.h"
+#include <limits>
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADVehicleDataTest, "Afterdark.Data.VehicleDefinition",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -19,6 +21,23 @@ bool FADVehicleDataTest::RunTest(const FString& Parameters)
         ADVehicleMath::StabilityBrakeCorrectionN(DesiredYaw,0.0)>0.0);
     TestTrue(TEXT("Stability brake demand is bounded"),
         FMath::Abs(ADVehicleMath::StabilityBrakeCorrectionN(100.0,-100.0))<=3500.0);
+    TestTrue(TEXT("Authored asphalt keeps the neutral tire coefficient"),
+        FMath::IsNearlyEqual(ADVehicleMath::SurfaceGripScale(.82),1.0,1.e-6));
+    TestTrue(TEXT("Lower-friction surfaces reduce tire grip"),
+        ADVehicleMath::SurfaceGripScale(.52)<ADVehicleMath::SurfaceGripScale(.82));
+    TestTrue(TEXT("Unexpected surface friction remains bounded"),
+        ADVehicleMath::SurfaceGripScale(8.0)<=1.35);
+    TestTrue(TEXT("Missing surface friction falls back to neutral grip"),
+        FMath::IsNearlyEqual(ADVehicleMath::SurfaceGripScale(std::numeric_limits<double>::quiet_NaN()),1.0,1.e-6));
+    const FADPhysicalSurfaceProfile Asphalt=ADSurfacePhysics::ResolveProfile(TEXT("M_Asphalt"));
+    const FADPhysicalSurfaceProfile Concrete=ADSurfacePhysics::ResolveProfile(TEXT("M_Concrete"));
+    const FADPhysicalSurfaceProfile Metal=ADSurfacePhysics::ResolveProfile(TEXT("M_Metal"));
+    const FADPhysicalSurfaceProfile Water=ADSurfacePhysics::ResolveProfile(TEXT("M_Water"));
+    TestTrue(TEXT("Asphalt profile matches the solver reference"),FMath::IsNearlyEqual(Asphalt.Friction,.82f));
+    TestTrue(TEXT("Concrete, metal and water have distinct lower grip"),
+        Asphalt.Friction>Concrete.Friction && Concrete.Friction>Metal.Friction && Metal.Friction>Water.Friction);
+    TestTrue(TEXT("Surface collision profiles keep restitution low and bounded"),
+        Asphalt.Restitution>=0.f && Asphalt.Restitution<=.1f && Water.Restitution<Asphalt.Restitution);
     FADVehicleDefinition Definition;
     FString Error;
     const FString Path = FPaths::ProjectContentDir() / TEXT("Data/Vehicles/aster_s6.json");
@@ -132,6 +151,8 @@ public:
         {
             Test->TestEqual(TEXT("All wheels settle on the road"), Telemetry.GroundedWheels, 4);
             Test->TestTrue(TEXT("Chassis remains above road"), Vehicle->GetActorLocation().Z > 25.);
+            Test->TestTrue(TEXT("Wheel contacts read the asphalt physical material"),
+                Telemetry.SurfaceGripScale > .95f && Telemetry.SurfaceGripScale < 1.05f);
             StartPosition = Vehicle->GetActorLocation();
             Physics->SetControls(1.f, 0.f, 0.f, false);
             StageStart = World->GetTimeSeconds();

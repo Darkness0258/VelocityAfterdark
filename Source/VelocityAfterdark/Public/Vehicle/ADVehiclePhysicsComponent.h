@@ -20,6 +20,7 @@ struct VELOCITYAFTERDARK_API FADVehicleTelemetry
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float Brake = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float Steering = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float Slip = 0.f;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float SurfaceGripScale = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) float StabilityIntervention = 0.f;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) int32 GroundedWheels = 0;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) bool bAutomaticTransmission = true;

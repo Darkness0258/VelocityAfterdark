@@ -1,7 +1,16 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "nitrousSeconds": 5,
   "rechargeSeconds": 22,
   "rechargeDelaySeconds": 3,
-  "torqueMultiplier": 1.35
+  "torqueMultiplier": 1.35,
+  "impactDamageThresholdMps": 4,
+  "impactDamageScaleMps": 40,
+  "impactCooldownSeconds": 0.5,
+  "sparkThresholdMps": 7,
+  "maxImpactSparks": 10,
+  "sparkLifetimeMinSeconds": 0.16,
+  "sparkLifetimeMaxSeconds": 0.42,
+  "impactLightLumens": 1200,
+  "impactColor": [1.0, 0.28, 0.055]
 }

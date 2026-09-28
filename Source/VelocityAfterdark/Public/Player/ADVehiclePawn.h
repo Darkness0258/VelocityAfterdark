@@ -52,6 +52,8 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     UFUNCTION(Server,Unreliable) void ServerDrive(float Throttle,float Brake,float Steering,bool bHandbrake,bool bNitrous,bool bActive);
     UFUNCTION(Server,Reliable) void ServerDrivingAction(uint8 Action);
+    UFUNCTION(NetMulticast,Unreliable) void MulticastImpactPresentation(FVector_NetQuantize Location,
+        FVector_NetQuantizeNormal SurfaceNormal,uint8 EncodedImpactSpeed);
 
     void SetDrivingEnabled(bool bEnabled);
     void ResetVehicle();
@@ -76,6 +78,7 @@ private:
     UFUNCTION() void OnRepEffects();
     UFUNCTION() void OnRepPaint();
     void UpdatePresentation(float DeltaSeconds);
+    void ApplyImpactCameraFeedback(const FVector& SurfaceNormal,float ImpactStrength);
     UStaticMeshComponent* AddPiece(FName Name, FVector Location, FVector Scale,
         UMaterialInterface* Material, bool bCylinder = false, FRotator Rotation = FRotator::ZeroRotator);
     UMaterialInterface* LoadSurface(const TCHAR* Path, FLinearColor FallbackColor, float Metallic = 0.0f);
@@ -116,5 +119,9 @@ private:
     bool bNetworkProbeMovementReported=false;
     float ShowcaseTime = 0.0f;
     float WiperPhase = 0.f;
+    float ImpactCameraAgeSeconds = 1.f;
+    float ImpactCameraStrength = 0.f;
+    float ImpactCameraSide = 0.f;
+    float ImpactCameraForward = 0.f;
     FString PresentedBodyStyle;
 };

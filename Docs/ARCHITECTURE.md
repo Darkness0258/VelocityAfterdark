@@ -1,4 +1,4 @@
-# VELOCITY: AFTERDARK — technical direction
+# VELOCITY AFTERDARK — technical direction
 
 The Phase 1/2 implementation descriptions below preserve the original architectural baseline. Connected Phase 3–9 source, current contracts and explicit limits are documented in [Integrated systems](INTEGRATED_SYSTEMS.md). Implementation status is separate from the deferred runtime acceptance pass.
 
@@ -33,6 +33,12 @@ flowchart LR
   Chaos -->|swept gate crossings| Race
   Race --> HUD
 ```
+
+## Physical contact and surface response
+
+The player, traffic and race vehicles use the same Chaos-simulated chassis and four swept tire contacts. AI supplies normalized throttle, brake and steering commands; it does not place a racing car by directly changing its transform. The wheel query requests the contacted physical material and scales tire capacity from that surface's friction. Wetness then applies its own grip reduction. A shared profile table defines friction and low restitution for asphalt, concrete, markings, metal, water and other named materials; active road and structure collision batches receive their matching profiles.
+
+The city uses simple collision proxies for roads, curbs and blocking structures. Most façade detail, street dressing and distant mesh instances stay non-colliding; enabling Chaos on every decorative mesh would multiply broadphase and streaming cost without improving driving. Retired or invalid AI vehicles are frozen and removed after leaving the active area to keep the nearby simulation bounded.
 
 The pawn assembles components. Physics owns dynamic vehicle state; input does not set transforms. Camera, HUD and audio observe state and never award money or change vehicle performance. World geometry owns collision independently from decoration. Game mode owns world boot and player spawn. Transient wheel/contact buffers are fixed-size and reused.
 

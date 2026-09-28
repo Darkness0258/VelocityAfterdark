@@ -261,6 +261,22 @@ void AADVehiclePawn::OnRepEffects()
 {
     if (HasActorBegunPlay()) VehicleEffects->ReceiveNetworkState(NetworkEffects.NitrousFraction,NetworkEffects.Health,NetworkEffects.bBoosting);
 }
+void AADVehiclePawn::MulticastImpactPresentation_Implementation(FVector_NetQuantize Location,
+    FVector_NetQuantizeNormal SurfaceNormal,uint8 EncodedImpactSpeed)
+{
+    const float DeltaVelocityMps=static_cast<float>(EncodedImpactSpeed)*(80.f/255.f);
+    if (VehicleEffects) VehicleEffects->PlayImpactPresentation(Location,SurfaceNormal,DeltaVelocityMps);
+    ApplyImpactCameraFeedback(SurfaceNormal,FMath::Clamp(DeltaVelocityMps/42.f,0.f,1.f));
+}
+void AADVehiclePawn::ApplyImpactCameraFeedback(const FVector& SurfaceNormal,float Strength)
+{
+    if (!IsLocallyControlled() || !bDrivingEnabled || bInGarage || !Chassis || Strength<=0.f) return;
+    const FVector LocalNormal=Chassis->GetComponentTransform().InverseTransformVectorNoScale(SurfaceNormal).GetSafeNormal();
+    ImpactCameraAgeSeconds=0.f;
+    ImpactCameraStrength=FMath::Max(ImpactCameraStrength*.5f,FMath::Clamp(Strength,0.f,1.f));
+    ImpactCameraSide=-LocalNormal.Y;
+    ImpactCameraForward=-LocalNormal.X;
+}
 void AADVehiclePawn::ServerDrive_Implementation(float Throttle,float Brake,float Steering,bool bHandbrake,bool bNitrous,bool bActive)
 {
     if (!HasAuthority() || !IsPlayerControlled() || !FMath::IsFinite(Throttle) || !FMath::IsFinite(Brake) || !FMath::IsFinite(Steering)) return;
@@ -704,9 +720,14 @@ void AADVehiclePawn::UpdatePresentation(float DeltaSeconds)
     else
     {
         ChaseArm->TargetArmLength = 780;
-        ChaseArm->SocketOffset = FVector::ZeroVector;
+        ImpactCameraAgeSeconds=FMath::Min(1.f,ImpactCameraAgeSeconds+DeltaSeconds);
+        const float ImpactEnvelope=ImpactCameraAgeSeconds<.55f ? FMath::Exp(-ImpactCameraAgeSeconds*8.5f) : 0.f;
+        const float ImpactWave=FMath::Sin(ImpactCameraAgeSeconds*42.f)*ImpactEnvelope*ImpactCameraStrength;
+        ChaseArm->SocketOffset = FVector(0.f,ImpactCameraSide*ImpactWave*3.2f,
+            FMath::Abs(ImpactWave)*1.8f);
         ChaseArm->SetRelativeLocation(FVector(0, 0, 120));
-        ChaseArm->SetRelativeRotation(FRotator(-10,0,0));
+        ChaseArm->SetRelativeRotation(FRotator(-10.f+ImpactCameraForward*ImpactWave*1.4f,
+            0.f,ImpactCameraSide*ImpactWave*1.8f));
     }
 }
 

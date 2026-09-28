@@ -71,7 +71,7 @@ void AADHUD::DrawHUD()
             Panel(0,0,1920,132,FLinearColor(0,0,0,.94f));
             Panel(0,872,1920,208,FLinearColor(0,0,0,.96f));
             Panel(78,78,54,3,Accent);
-            Label(TEXT("VELOCITY  /  AFTERDARK"),78,31,.68f,Muted);
+            Label(TEXT("VELOCITY AFTERDARK"),78,31,.68f,Muted);
             Label(Cinematic->GetStoryTitle(),78,87,1.18f,White);
             Label(FString::Printf(TEXT("SHOT %02d  /  04"),Cinematic->GetStoryShotIndex()),1510,87,.68f,Accent);
             Label(Cinematic->GetStoryAttribution(),92,896,.73f,Accent);
@@ -115,8 +115,7 @@ void AADHUD::DrawHUD()
     {
         Panel(0,0,1920,1080,FLinearColor(0,0,0,.20f));
         Label(GetNetMode()==NM_Standalone ? TEXT("N O V A   C I T Y     /     D O C K S I D E") : TEXT("N O V A   C I T Y     /     ONLINE FREE ROAM"),76,70,.9f,White);
-        Label(TEXT("VELOCITY"),72,178,4.2f,White);
-        Label(TEXT("A F T E R D A R K"),78,330,1.8f,Accent);
+        Label(TEXT("VELOCITY AFTERDARK"),72,178,2.9f,White);
         Panel(76,640,655,326,Black);
         Panel(76,640,4,326,Accent);
         Label(PC->IsGamePaused()?TEXT("DRIVE PAUSED"):TEXT("THE CITY CAN WAIT."),108,672,1.35f,White);
