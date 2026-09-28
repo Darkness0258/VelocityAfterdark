@@ -10,6 +10,15 @@ class UADRaceDriverComponent;
 class AADAtmosphere;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
+
+UENUM()
+enum class EADTrafficSignalPhase : uint8
+{
+    Green,
+    Amber,
+    Red
+};
 
 /** Bounded physical road traffic. Route geometry is shared with the road circuit. */
 UCLASS()
@@ -26,6 +35,8 @@ public:
     bool IsReady() const { return bReady; }
     const FString& GetError() const { return Error; }
     bool IsSignalRed() const;
+    EADTrafficSignalPhase GetSignalPhase() const { return SignalPhase; }
+    static EADTrafficSignalPhase GetSignalPhaseAtTime(float TimeSeconds,float Green,float Amber,float Red);
     int32 GetTrafficCount() const { return Cars.Num(); }
     int32 GetEmergencyYieldCount() const;
 private:
@@ -35,14 +46,22 @@ private:
     bool RemoveRetiredCars(float DeltaSeconds);
     void ClearTraffic();
     void RefreshNeighbors();
+    void UpdateSignalVisuals(EADTrafficSignalPhase NewPhase);
     TWeakObjectPtr<AADVehiclePawn> Player;
     TWeakObjectPtr<AADAtmosphere> Atmosphere;
     UPROPERTY(Transient) TArray<TObjectPtr<AADVehiclePawn>> Cars;
     UPROPERTY(Transient) TArray<TObjectPtr<UADRaceDriverComponent>> Drivers;
     // Negative means active. Failed cars stay frozen until the player leaves the area.
     TArray<float> RetirementSeconds;
-    UPROPERTY(Transient) TObjectPtr<UInstancedStaticMeshComponent> Lamps;
-    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SignalMaterial;
+    UPROPERTY(Transient) TObjectPtr<UInstancedStaticMeshComponent> SignalPoles;
+    UPROPERTY(Transient) TObjectPtr<UInstancedStaticMeshComponent> SignalHousings;
+    UPROPERTY(Transient) TObjectPtr<UInstancedStaticMeshComponent> RedLenses;
+    UPROPERTY(Transient) TObjectPtr<UInstancedStaticMeshComponent> AmberLenses;
+    UPROPERTY(Transient) TObjectPtr<UInstancedStaticMeshComponent> GreenLenses;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> RedLensMaterial;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> AmberLensMaterial;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> GreenLensMaterial;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SignalOffMaterial;
     FADRaceDefinition Route;
     TArray<double> SignalsM;
     FString Error;
@@ -50,9 +69,10 @@ private:
     float SpeedScale = .58f;
     float RedSeconds = 8.f;
     float GreenSeconds = 20.f;
+    float AmberSeconds = 3.f;
     float SignalTime = 0.f;
     float RetryTime = 0.f;
     bool bEnabled = true;
     bool bReady = false;
-    bool bPreviousRed = false;
+    EADTrafficSignalPhase SignalPhase = EADTrafficSignalPhase::Green;
 };

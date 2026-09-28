@@ -25,6 +25,30 @@
 
 namespace
 {
+    bool ClipLineToRect(FVector2D& Start,FVector2D& End,const FVector2D& Minimum,const FVector2D& Maximum)
+    {
+        const FVector2D Delta=End-Start;
+        double Enter=0.,Leave=1.;
+        const double P[4]={-Delta.X,Delta.X,-Delta.Y,Delta.Y};
+        const double Q[4]={Start.X-Minimum.X,Maximum.X-Start.X,Start.Y-Minimum.Y,Maximum.Y-Start.Y};
+        for (int32 Edge=0;Edge<4;++Edge)
+        {
+            if (FMath::IsNearlyZero(P[Edge]))
+            {
+                if (Q[Edge]<0.) return false;
+                continue;
+            }
+            const double T=Q[Edge]/P[Edge];
+            if (P[Edge]<0.) Enter=FMath::Max(Enter,T);
+            else Leave=FMath::Min(Leave,T);
+            if (Enter>Leave) return false;
+        }
+        const FVector2D Original=Start;
+        Start=Original+Delta*Enter;
+        End=Original+Delta*Leave;
+        return true;
+    }
+
     FString RaceTime(double Seconds)
     {
         const int64 Milliseconds=FMath::Max<int64>(0,FMath::RoundToInt64(Seconds*1000.));
@@ -228,6 +252,7 @@ void AADHUD::DrawHUD()
         }
     }
     DrawRace();
+    if (PC->IsSessionStarted() && !PC->IsGamePaused()) DrawMinimap();
     if (const auto* Ownership=PC->GetGarageSession()->GetOwnership(); Ownership && Ownership->IsReady())
     {
         const auto* Career=GetWorld()->GetGameInstance()->GetSubsystem<UADCareerSubsystem>();
@@ -266,6 +291,113 @@ void AADHUD::DrawHUD()
         Panel(50,1020,1820,48,FLinearColor(.24f,.025f,.015f,.96f));
         Label(TEXT("DRIVING UNAVAILABLE: ")+Error,68,1032,.75f,White);
     }
+}
+
+void AADHUD::DrawMinimap()
+{
+    const auto* PC=Cast<AADPlayerController>(PlayerOwner);
+    const AADVehiclePawn* Car=PC ? PC->GetVehiclePawn() : nullptr;
+    const AADGameMode* Mode=GetWorld() ? GetWorld()->GetAuthGameMode<AADGameMode>() : nullptr;
+    const AADExplorationDirector* Exploration=Mode ? Mode->GetExploration() : nullptr;
+    if (!PC || !Car) return;
+
+    // Keep the map above the free-roam difficulty hint at reference Y=936.
+    constexpr float X=62.f,Y=650.f,Width=420.f,Height=250.f;
+    const FVector2D ClipMin(X+10.f,Y+50.f),ClipMax(X+Width-10.f,Y+Height-30.f);
+    const FVector2D Center((ClipMin.X+ClipMax.X)*.5f,(ClipMin.Y+ClipMax.Y)*.5f);
+    const FVector2D Player(Car->GetActorLocation());
+    const FVector Forward3D=Car->GetActorForwardVector();
+    const FVector2D Forward(Forward3D.X,Forward3D.Y);
+    const FLinearColor White(.92f,.95f,.96f),Muted(.50f,.61f,.65f),Accent(.53f,.92f,.77f),Black(.012f,.025f,.032f,.9f);
+    Panel(X,Y,Width,Height,Black);
+    Panel(X,Y,3.f,Height,Accent);
+    Label(TEXT("NOVA CITY  /  LIVE NAV"),X+17.f,Y+8.f,.60f,Accent);
+    const FString District=Mode && Mode->GetRegionalWorld() && Mode->GetRegionalWorld()->IsReady()
+        ? Mode->GetRegionalWorld()->GetCurrentDistrict().ToUpper() : TEXT("DOCKSIDE");
+    Label(District,X+Width-145.f,Y+8.f,.52f,Muted);
+    Panel(ClipMin.X,ClipMin.Y,ClipMax.X-ClipMin.X,ClipMax.Y-ClipMin.Y,FLinearColor(.025f,.049f,.059f,.82f));
+
+    const auto DrawMapLine=[&](FVector2D A,FVector2D B,FLinearColor Color,float Thickness)
+    {
+        if (!ClipLineToRect(A,B,ClipMin,ClipMax)) return;
+        DrawLine(UiOffsetX+A.X*UiScale,UiOffsetY+A.Y*UiScale,
+            UiOffsetX+B.X*UiScale,UiOffsetY+B.Y*UiScale,Color,Thickness*UiScale);
+    };
+    if (Exploration && Exploration->IsReady()) for (const FADRoadNetworkSegment& Road:Exploration->GetRoadNetwork().GetSegments())
+    {
+        FVector2D A=Center+ADMinimapLayout::Project(Road.Start,Player,Forward);
+        FVector2D B=Center+ADMinimapLayout::Project(Road.End,Player,Forward);
+        DrawMapLine(A,B,FLinearColor(.11f,.19f,.22f),5.f);
+        A=Center+ADMinimapLayout::Project(Road.Start,Player,Forward);
+        B=Center+ADMinimapLayout::Project(Road.End,Player,Forward);
+        DrawMapLine(A,B,FLinearColor(.34f,.46f,.49f),1.5f);
+    }
+
+    const bool bPursuit=Mode && Mode->GetPoliceDirector() && Mode->GetPoliceDirector()->IsActive();
+    const auto* Ownership=GetWorld()->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
+    const auto* Target=Exploration && Exploration->IsReady() ? Exploration->GetTrackedDiscovery() : nullptr;
+    bool bHasWaypoint=false;
+    bool bUsingCustomWaypoint=false;
+    FVector2D Waypoint=FVector2D::ZeroVector;
+    FString Destination;
+    if (!bPursuit && Ownership && Ownership->IsReady() && Ownership->GetProfile().World.bCustomWaypointRecorded && Exploration && Exploration->IsReady())
+    {
+        Waypoint=Ownership->GetProfile().World.CustomWaypoint;
+        Destination=TEXT("CUSTOM WAYPOINT");
+        bHasWaypoint=true;
+        bUsingCustomWaypoint=true;
+        const double Now=GetWorld()->GetTimeSeconds();
+        if (MinimapLastRouteUpdate<0. || Now-MinimapLastRouteUpdate>=.6
+            || FVector2D::Distance(Player,MinimapLastRouteStart)>1800.
+            || FVector2D::Distance(Waypoint,MinimapLastRouteGoal)>50.)
+        {
+            MinimapRouteError.Reset();
+            Exploration->GetRoadNetwork().BuildRoute(Player,Waypoint,MinimapWaypointRoute,
+                MinimapWaypointDistanceCm,MinimapRouteError);
+            MinimapLastRouteStart=Player;
+            MinimapLastRouteGoal=Waypoint;
+            MinimapLastRouteUpdate=Now;
+        }
+        for (int32 Index=1;Index<MinimapWaypointRoute.Num();++Index)
+            DrawMapLine(Center+ADMinimapLayout::Project(MinimapWaypointRoute[Index-1],Player,Forward),
+                Center+ADMinimapLayout::Project(MinimapWaypointRoute[Index],Player,Forward),
+                FLinearColor(.98f,.64f,.28f),3.f);
+    }
+    else if (!bPursuit && Target && Exploration && Exploration->IsReady())
+    {
+        Waypoint=Target->Position;
+        Destination=Target->Name.ToUpper();
+        bHasWaypoint=true;
+        const auto& Route=Exploration->GetRoute();
+        for (int32 Index=1;Index<Route.Num();++Index)
+            DrawMapLine(Center+ADMinimapLayout::Project(Route[Index-1],Player,Forward),
+                Center+ADMinimapLayout::Project(Route[Index],Player,Forward),Accent,3.f);
+    }
+
+    if (bHasWaypoint)
+    {
+        FVector2D Pin=Center+ADMinimapLayout::Project(Waypoint,Player,Forward);
+        Pin.X=FMath::Clamp(Pin.X,ClipMin.X+7.f,ClipMax.X-7.f);
+        Pin.Y=FMath::Clamp(Pin.Y,ClipMin.Y+7.f,ClipMax.Y-7.f);
+        Panel(Pin.X-5.f,Pin.Y-5.f,10.f,10.f,FLinearColor(.98f,.64f,.28f));
+    }
+    if (bHasWaypoint) Label(TEXT("DEST / ")+Destination.Left(30),X+17.f,Y+27.f,.45f,White);
+    else if (bPursuit) Label(TEXT("PURSUIT / ROUTE CLEAR"),X+17.f,Y+27.f,.45f,FLinearColor(1.f,.38f,.25f));
+    else if (!Exploration || !Exploration->IsReady()) Label(TEXT("ROAD DATA LOADING"),X+17.f,Y+27.f,.45f,Muted);
+    else if (!Exploration->GetRouteError().IsEmpty()) Label(TEXT("NO ROAD ROUTE"),X+17.f,Y+27.f,.45f,Muted);
+    else Label(TEXT("EXPLORE / F5 FULL MAP"),X+17.f,Y+27.f,.45f,Muted);
+
+    // Heading-up projection keeps the player's triangle upright as roads rotate underneath.
+    DrawMapLine(Center+FVector2D(0.f,-10.f),Center+FVector2D(8.f,8.f),White,2.7f);
+    DrawMapLine(Center+FVector2D(8.f,8.f),Center+FVector2D(0.f,4.f),White,2.7f);
+    DrawMapLine(Center+FVector2D(0.f,4.f),Center+FVector2D(-8.f,8.f),White,2.7f);
+    DrawMapLine(Center+FVector2D(-8.f,8.f),Center+FVector2D(0.f,-10.f),White,2.7f);
+    const float RouteDistanceCm=bUsingCustomWaypoint ? static_cast<float>(MinimapWaypointDistanceCm)
+        : (Exploration && Exploration->IsReady() ? static_cast<float>(Exploration->GetRouteDistanceCm()) : 0.f);
+    const FString Footer=bHasWaypoint && RouteDistanceCm>0.f
+        ? FString::Printf(TEXT("%.2f KM BY ROAD  /  F5 FULL MAP"),RouteDistanceCm/100000.f)
+        : TEXT("HEADING UP  /  F5 FULL MAP");
+    Label(Footer,X+17.f,Y+Height-25.f,.51f,Muted);
 }
 
 void AADHUD::DrawMap()

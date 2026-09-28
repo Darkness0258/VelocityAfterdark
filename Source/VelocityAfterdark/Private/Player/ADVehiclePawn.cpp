@@ -480,7 +480,7 @@ void AADVehiclePawn::BuildVehicle()
             {
                 const float Angle = Spoke*72;
                 UStaticMeshComponent* Bar = AddPiece(FName(*FString::Printf(TEXT("Spoke%d_%d_%d"),I,Face,Spoke)),
-                    FVector(0,Face*13.5,0),FVector(.43,.03,.04),Rubber,false,FRotator(Angle,0,0));
+                    FVector(0,Face*13.5,0),FVector(.43,.03,.04),WheelMetal,false,FRotator(Angle,0,0));
                 Bar->AttachToComponent(Pivot,FAttachmentTransformRules::KeepRelativeTransform);
             }
         }

@@ -3,5 +3,6 @@
   "maxCars": 4,
   "speedScale": 0.58,
   "redSeconds": 8,
+  "amberSeconds": 3,
   "greenSeconds": 20
 }

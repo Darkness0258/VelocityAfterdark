@@ -8,8 +8,10 @@
 #include "Racing/ADRaceManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
@@ -21,10 +23,21 @@ AADTrafficManager::AADTrafficManager()
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.TickGroup = TG_PrePhysics;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("TrafficRoot"));
-    Lamps = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("SignalLamps"));
-    Lamps->SetupAttachment(RootComponent);
-    Lamps->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    Lamps->SetCastShadow(false);
+    const auto MakeSignalBatch = [this](const TCHAR* Name)
+    {
+        auto* Component = CreateDefaultSubobject<UInstancedStaticMeshComponent>(Name);
+        Component->SetupAttachment(RootComponent);
+        Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Component->SetGenerateOverlapEvents(false);
+        Component->SetCanEverAffectNavigation(false);
+        Component->SetCastShadow(false);
+        return Component;
+    };
+    SignalPoles = MakeSignalBatch(TEXT("SignalPoles"));
+    SignalHousings = MakeSignalBatch(TEXT("SignalHousings"));
+    RedLenses = MakeSignalBatch(TEXT("RedSignalLenses"));
+    AmberLenses = MakeSignalBatch(TEXT("AmberSignalLenses"));
+    GreenLenses = MakeSignalBatch(TEXT("GreenSignalLenses"));
 }
 
 bool AADTrafficManager::LoadSettings()
@@ -40,11 +53,12 @@ bool AADTrafficManager::LoadSettings()
         return Item && (*Item)->Type==EJson::Number && (*Item)->TryGetNumber(Value)
             && FMath::IsFinite(Value) && Value>=Minimum && Value<=Maximum;
     };
-    double Schema=0,Count=0,Speed=0,Red=0,Green=0;
+    double Schema=0,Count=0,Speed=0,Red=0,Amber=0,Green=0;
     if (!Number(TEXT("schemaVersion"),1,1,Schema) || !Number(TEXT("maxCars"),0,8,Count) || Count!=FMath::FloorToDouble(Count)
-        || !Number(TEXT("speedScale"),.4,.75,Speed) || !Number(TEXT("redSeconds"),3,30,Red) || !Number(TEXT("greenSeconds"),5,60,Green))
+        || !Number(TEXT("speedScale"),.4,.75,Speed) || !Number(TEXT("redSeconds"),3,30,Red)
+        || !Number(TEXT("amberSeconds"),1,8,Amber) || !Number(TEXT("greenSeconds"),5,60,Green))
     { Error=TEXT("Traffic settings are invalid."); return false; }
-    MaxCars=static_cast<int32>(Count); SpeedScale=Speed; RedSeconds=Red; GreenSeconds=Green;
+    MaxCars=static_cast<int32>(Count); SpeedScale=Speed; RedSeconds=Red; AmberSeconds=Amber; GreenSeconds=Green;
     if (!Route.LoadFromJson(FPaths::ProjectContentDir()/TEXT("Data/Races/dockside_circuit.json"),Error)) return false;
     double DistanceError=0;
     SignalsM={0.,Route.ClosestDistanceM(FVector(0,25000,0),DistanceError)};
@@ -56,18 +70,64 @@ void AADTrafficManager::BeginPlay()
     Super::BeginPlay();
     bReady=LoadSettings();
     if (!bReady) return;
-    Lamps->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
-    auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Velocity/Materials/M_EmissiveWhite.M_EmissiveWhite"));
-    if (Base)
+    UStaticMesh* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
+    UStaticMesh* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+    UStaticMesh* Sphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+    UMaterialInterface* Metal=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Velocity/Materials/M_Metal.M_Metal"));
+    UMaterialInterface* White=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Velocity/Materials/M_EmissiveWhite.M_EmissiveWhite"));
+    SignalOffMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Velocity/Materials/M_Glass.M_Glass"));
+    if (!Cube || !Cylinder || !Sphere || !Metal || !White || !SignalOffMaterial)
     {
-        SignalMaterial=UMaterialInstanceDynamic::Create(Base,this);
-        Lamps->SetMaterial(0,SignalMaterial);
-        for (const double Distance : SignalsM)
-        {
-            const FVector2D P=Route.PointAtDistance(Distance);
-            Lamps->AddInstance(FTransform(FRotator::ZeroRotator,FVector(P.X,P.Y,580),FVector(.7,.7,.9)));
-        }
+        UE_LOG(LogTemp,Warning,TEXT("Traffic is active but its detailed signal-light materials or meshes are unavailable."));
+        return;
     }
+    SignalPoles->SetStaticMesh(Cylinder);
+    SignalPoles->SetMaterial(0,Metal);
+    SignalHousings->SetStaticMesh(Cube);
+    SignalHousings->SetMaterial(0,Metal);
+    for (const auto& Lens: {RedLenses.Get(),AmberLenses.Get(),GreenLenses.Get()}) Lens->SetStaticMesh(Sphere);
+
+    const auto MakeLensMaterial=[this,White](const TCHAR* Name,const FLinearColor& Tint)
+    {
+        auto* Material=UMaterialInstanceDynamic::Create(White,this,FName(Name));
+        if (Material)
+        {
+            Material->SetVectorParameterValue(TEXT("BaseColor"),Tint);
+            Material->SetVectorParameterValue(TEXT("EmissiveColor"),Tint*2.2f);
+            Material->SetScalarParameterValue(TEXT("Roughness"),.28f);
+        }
+        return Material;
+    };
+    const FLinearColor RedTint(1.f,.045f,.025f),AmberTint(1.f,.40f,.045f),GreenTint(.12f,.88f,.25f);
+    RedLensMaterial=MakeLensMaterial(TEXT("RedLensGlow"),RedTint);
+    AmberLensMaterial=MakeLensMaterial(TEXT("AmberLensGlow"),AmberTint);
+    GreenLensMaterial=MakeLensMaterial(TEXT("GreenLensGlow"),GreenTint);
+    if (!RedLensMaterial || !AmberLensMaterial || !GreenLensMaterial)
+    {
+        UE_LOG(LogTemp,Warning,TEXT("Traffic is active but signal lens material creation failed."));
+        return;
+    }
+    RedLenses->SetMaterial(0,SignalOffMaterial);
+    AmberLenses->SetMaterial(0,SignalOffMaterial);
+    GreenLenses->SetMaterial(0,SignalOffMaterial);
+    for (const double Distance : SignalsM)
+    {
+        const FVector2D P=Route.PointAtDistance(Distance);
+        const FVector2D RoadDirection=(Route.PointAtDistance(Distance+10.)-Route.PointAtDistance(Distance-10.)).GetSafeNormal();
+        const FVector2D RoadRight(RoadDirection.Y,-RoadDirection.X);
+        const FVector2D Post=P+RoadRight*1370.-RoadDirection*350.;
+        const FRotator Facing(0.f,FMath::RadiansToDegrees(FMath::Atan2(RoadDirection.Y,RoadDirection.X))+180.f,0.f);
+        const FVector Ground(Post,0.f);
+        SignalPoles->AddInstance(FTransform(FRotator::ZeroRotator,Ground+FVector(0.f,0.f,230.f),FVector(.11f,.11f,4.6f)));
+        const FVector Head(Post,455.f);
+        SignalHousings->AddInstance(FTransform(Facing,Head,FVector(.26f,.44f,1.f)));
+        const FVector Offsets[] = {FVector(18.f,0.f,28.f),FVector(18.f,0.f,0.f),FVector(18.f,0.f,-28.f)};
+        const FVector LensScale(.15f,.15f,.15f);
+        RedLenses->AddInstance(FTransform(Facing,Head+Facing.RotateVector(Offsets[0]),LensScale));
+        AmberLenses->AddInstance(FTransform(Facing,Head+Facing.RotateVector(Offsets[1]),LensScale));
+        GreenLenses->AddInstance(FTransform(Facing,Head+Facing.RotateVector(Offsets[2]),LensScale));
+    }
+    UpdateSignalVisuals(EADTrafficSignalPhase::Green);
 }
 
 void AADTrafficManager::BindPlayer(AADVehiclePawn* Car,AADAtmosphere* Weather)
@@ -191,7 +251,31 @@ bool AADTrafficManager::RemoveRetiredCars(float DeltaSeconds)
     return bRemoved;
 }
 
-bool AADTrafficManager::IsSignalRed() const { return SignalTime>=GreenSeconds; }
+EADTrafficSignalPhase AADTrafficManager::GetSignalPhaseAtTime(float TimeSeconds,float Green,float Amber,float Red)
+{
+    if (!FMath::IsFinite(TimeSeconds) || !FMath::IsFinite(Green) || !FMath::IsFinite(Amber) || !FMath::IsFinite(Red)
+        || Green<=0.f || Amber<=0.f || Red<=0.f) return EADTrafficSignalPhase::Red;
+    const float Cycle=Green+Amber+Red;
+    const float Position=FMath::Fmod(FMath::Max(0.f,TimeSeconds),Cycle);
+    if (Position<Green) return EADTrafficSignalPhase::Green;
+    if (Position<Green+Amber) return EADTrafficSignalPhase::Amber;
+    return EADTrafficSignalPhase::Red;
+}
+
+bool AADTrafficManager::IsSignalRed() const
+{
+    // Traffic AI stops on amber as well, using the same conservative approach as a yellow-light rule.
+    return SignalPhase!=EADTrafficSignalPhase::Green;
+}
+
+void AADTrafficManager::UpdateSignalVisuals(EADTrafficSignalPhase NewPhase)
+{
+    SignalPhase=NewPhase;
+    if (!RedLenses || !AmberLenses || !GreenLenses) return;
+    RedLenses->SetMaterial(0,NewPhase==EADTrafficSignalPhase::Red ? RedLensMaterial.Get() : SignalOffMaterial.Get());
+    AmberLenses->SetMaterial(0,NewPhase==EADTrafficSignalPhase::Amber ? AmberLensMaterial.Get() : SignalOffMaterial.Get());
+    GreenLenses->SetMaterial(0,NewPhase==EADTrafficSignalPhase::Green ? GreenLensMaterial.Get() : SignalOffMaterial.Get());
+}
 
 int32 AADTrafficManager::GetEmergencyYieldCount() const
 {
@@ -211,15 +295,9 @@ void AADTrafficManager::Tick(float DeltaSeconds)
     if (RemoveRetiredCars(DeltaSeconds)) RefreshNeighbors();
     RetryTime-=DeltaSeconds;
     if (RetryTime<=0.f) { Populate(); RetryTime=3.f; }
-    SignalTime=FMath::Fmod(SignalTime+DeltaSeconds,GreenSeconds+RedSeconds);
-    const bool bRed=IsSignalRed();
-    if (SignalMaterial && (bRed!=bPreviousRed || SignalTime<DeltaSeconds*2))
-    {
-        const FLinearColor Color=bRed ? FLinearColor(1.f,.015f,.01f) : FLinearColor(.015f,1.f,.1f);
-        SignalMaterial->SetVectorParameterValue(TEXT("EmissiveColor"),Color*4);
-        SignalMaterial->SetVectorParameterValue(TEXT("BaseColor"),Color);
-    }
-    bPreviousRed=bRed;
+    SignalTime=FMath::Fmod(SignalTime+DeltaSeconds,GreenSeconds+AmberSeconds+RedSeconds);
+    const EADTrafficSignalPhase NextPhase=GetSignalPhaseAtTime(SignalTime,GreenSeconds,AmberSeconds,RedSeconds);
+    if (NextPhase!=SignalPhase) UpdateSignalVisuals(NextPhase);
     const AADPoliceDirector* Police=nullptr;
     if (const auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>()) Police=Mode->GetPoliceDirector();
     const bool bPursuit=Police && Police->GetState()==EADPoliceState::Pursuit && Police->GetHeat()>0;
@@ -239,7 +317,7 @@ void AADTrafficManager::Tick(float DeltaSeconds)
             && FVector::DistSquared2D(Position,Player->GetActorLocation())<FMath::Square(3500.);
         Driver->SetEmergencyYield(bEmergencyYield,Index%2==0 ? 285.f : -285.f);
         bool bStop=false;
-        if (bRed)
+        if (IsSignalRed())
         {
             for (const double Signal:SignalsM)
             {
@@ -267,7 +345,8 @@ void AADTrafficManager::SetEnabled(bool bInEnabled)
 {
     if (bEnabled==bInEnabled) return;
     bEnabled=bInEnabled;
-    Lamps->SetVisibility(bEnabled);
+    for (UInstancedStaticMeshComponent* Component:{SignalPoles.Get(),SignalHousings.Get(),RedLenses.Get(),AmberLenses.Get(),GreenLenses.Get()})
+        if (Component) Component->SetVisibility(bEnabled);
     if (!bEnabled) ClearTraffic();
     else if (bReady) Populate();
 }

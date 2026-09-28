@@ -116,7 +116,8 @@ switch ($Action) {
             throw 'Unreal did not produce a fresh automation report.'
         }
         $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json
-        $expectedTests = @('Afterdark.Data.VehicleDefinition', 'Afterdark.Data.RaceDefinition', 'Afterdark.Runtime.InputAndCamera')
+        $expectedTests = @('Afterdark.Data.VehicleDefinition', 'Afterdark.Data.RaceDefinition', 'Afterdark.Data.MinimapProjection', 'Afterdark.Runtime.InputAndCamera')
+        $expectedTests += @('Afterdark.Runtime.Traffic.SignalPhases','Afterdark.Runtime.Audio.ArrivalVoiceover')
         foreach ($rate in @(30, 60, 120)) {
             $expectedTests += "Afterdark.Runtime.DriveAndBrake.${rate}Hz"
             foreach ($scenario in @('HighSpeed', 'Steering', 'Barrier', 'StrandedRecovery', 'Curb', 'Wheelspin', 'TractionControl')) {
@@ -172,6 +173,9 @@ switch ($Action) {
         }
         if ($renderProcess.ExitCode -ne 0 -or -not (Select-String -LiteralPath $renderLog -SimpleMatch 'AFTERDARK_RENDER_SMOKE_COMPLETE' -Quiet)) {
             throw "Rendered startup/capture did not finish. Inspect $renderLog"
+        }
+        if (-not (Select-String -LiteralPath $renderLog -SimpleMatch 'AFTERDARK_VOICEOVER_SMOKE_COMPLETE' -Quiet)) {
+            throw "Arrival voiceover did not start during the render smoke. Inspect $renderLog"
         }
         $renderOutput = Join-Path $artifactRoot 'Render'
         New-Item -ItemType Directory -Path $renderOutput -Force | Out-Null

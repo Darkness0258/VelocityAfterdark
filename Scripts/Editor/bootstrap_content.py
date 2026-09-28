@@ -6,11 +6,16 @@ The map contains no district or lights: ADGameMode creates exactly one at runtim
 This script authors native .uasset/.umap files; ordinary Python cannot execute it.
 """
 
+from pathlib import Path
+
 import unreal
 
 
 MATERIAL_ROOT = "/Game/Velocity/Materials"
 MAP_PATH = "/Game/Velocity/Maps/L_Dockside"
+VOICE_SOURCE = Path(__file__).resolve().parents[2] / "Assets/VoiceSource/VO_ArrivalBroadcast.wav"
+VOICE_DESTINATION = "/Game/Velocity/Audio/Voice"
+VOICE_ASSET_NAME = "VO_ArrivalBroadcast"
 
 # Linear color, roughness, metallic, emissive multiplier. Opaque glass is an
 # explicit blockout approximation; replace it with authored automotive glass.
@@ -104,6 +109,41 @@ def create_material(name, specification):
     return True
 
 
+def import_arrival_voiceover():
+    """Import the authored opening radio line as a cooked SoundWave asset."""
+    if not VOICE_SOURCE.is_file() or VOICE_SOURCE.stat().st_size < 12000:
+        raise RuntimeError(f"Arrival voiceover source is missing or unexpectedly small: {VOICE_SOURCE}")
+    asset_path = f"{VOICE_DESTINATION}/{VOICE_ASSET_NAME}.{VOICE_ASSET_NAME}"
+    if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
+        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+        if not asset or asset.get_class().get_name() != "SoundWave":
+            raise RuntimeError(f"Existing voice asset is not a SoundWave: {asset_path}")
+        unreal.log(f"AFTERDARK: preserving existing {asset_path}")
+        return False
+
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", str(VOICE_SOURCE))
+    task.set_editor_property("destination_path", VOICE_DESTINATION)
+    task.set_editor_property("destination_name", VOICE_ASSET_NAME)
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", False)
+    task.set_editor_property("save", True)
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
+    unreal.AssetRegistryHelpers.get_asset_registry().wait_for_completion()
+    asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if not asset or asset.get_class().get_name() != "SoundWave":
+        raise RuntimeError(
+            f"Arrival voiceover import failed; importer returned {task.get_editor_property('imported_object_paths')}"
+        )
+    if not unreal.EditorAssetLibrary.save_loaded_asset(asset, only_if_is_dirty=False):
+        raise RuntimeError(f"Could not save imported voiceover {asset_path}")
+    package_file = Path(unreal.Paths.project_content_dir()) / "Velocity/Audio/Voice" / f"{VOICE_ASSET_NAME}.uasset"
+    if not package_file.is_file():
+        raise RuntimeError(f"Unreal imported the voiceover but did not save {package_file}")
+    unreal.log(f"AFTERDARK_VOICE_ASSET: {asset_path}")
+    return True
+
+
 def main():
     # Never close or save a user's dirty level or unrelated content implicitly.
     if unreal.EditorLoadingAndSavingUtils.get_dirty_map_packages():
@@ -112,6 +152,7 @@ def main():
         raise RuntimeError("Save your edited content before running the Afterdark bootstrap.")
     unreal.AssetRegistryHelpers.get_asset_registry().wait_for_completion()
     created = sum(create_material(name, spec) for name, spec in MATERIALS.items())
+    imported_voice = import_arrival_voiceover()
     if unreal.EditorAssetLibrary.does_asset_exist(MAP_PATH):
         existing_map = unreal.EditorAssetLibrary.load_asset(MAP_PATH)
         if not isinstance(existing_map, unreal.World):
@@ -125,7 +166,10 @@ def main():
             raise RuntimeError(f"Could not save {MAP_PATH}")
         if not unreal.EditorAssetLibrary.does_asset_exist(MAP_PATH):
             raise RuntimeError(f"Saved map missing from asset registry: {MAP_PATH}")
-    unreal.log(f"AFTERDARK_BOOTSTRAP_OK: {created} new materials; {MAP_PATH} ready")
+    unreal.log(
+        f"AFTERDARK_BOOTSTRAP_OK: {created} new materials; "
+        f"arrival voice {'imported' if imported_voice else 'preserved'}; {MAP_PATH} ready"
+    )
 
 
 if __name__ == "__main__":

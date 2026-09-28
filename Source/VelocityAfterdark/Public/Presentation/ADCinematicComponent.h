@@ -4,7 +4,9 @@
 #include "ADCinematicComponent.generated.h"
 class ACameraActor;
 class AADVehiclePawn;
+class UAudioComponent;
 class UPrimitiveComponent;
+class USoundBase;
 UENUM()
 enum class EADCinematicMode : uint8 { None, Photo, Replay, Story };
 struct FADReplaySample
@@ -34,6 +36,7 @@ public:
     void TogglePlayback() { if (Mode==EADCinematicMode::Replay) bPlaying=!bPlaying; }
     void CycleCamera() { CameraIndex=(CameraIndex+1)%3; }
     bool IsActive() const { return Mode!=EADCinematicMode::None; }
+    bool IsStoryVoiceoverPlaying() const;
     bool IsHudHidden() const { return bHidden || CaptureHideFrames>0; }
     EADCinematicMode GetMode() const { return Mode; }
     const FString& GetStoryTitle() const { return StoryTitle; }
@@ -57,12 +60,16 @@ private:
     void ApplyPhotoLook();
     void UpdateReplay(float RealDelta);
     void UpdateStory(float RealDelta);
+    void PlayArrivalVoiceover();
+    void StopStoryVoiceover();
     bool StartStory(const FString& Title,const FString& Attribution,const FString& Narrative,
         const FString& Closing,bool bContinueToCareerRace);
     void Record(float DeltaSeconds);
     bool BuildPlayback();
     void CacheResultMetadata();
     UPROPERTY(Transient) TObjectPtr<ACameraActor> Camera;
+    UPROPERTY(Transient) TObjectPtr<UAudioComponent> StoryVoiceover;
+    UPROPERTY(Transient) TObjectPtr<USoundBase> ArrivalVoiceover;
     TWeakObjectPtr<AADVehiclePawn> Vehicle;
     TWeakObjectPtr<UPrimitiveComponent> Chassis;
     TWeakObjectPtr<AADVehiclePawn> RecordedVehicle;

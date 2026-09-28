@@ -18,7 +18,14 @@ private:
     void DrawGarage();
     void DrawSettings();
     void DrawMap();
+    void DrawMinimap();
     float UiScale=1;
     float UiOffsetX=0;
     float UiOffsetY=0;
+    TArray<FVector2D> MinimapWaypointRoute;
+    FVector2D MinimapLastRouteStart=FVector2D::ZeroVector;
+    FVector2D MinimapLastRouteGoal=FVector2D::ZeroVector;
+    double MinimapLastRouteUpdate=-1.;
+    double MinimapWaypointDistanceCm=0.;
+    FString MinimapRouteError;
 };

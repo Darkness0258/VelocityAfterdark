@@ -366,8 +366,10 @@ void AADAtmosphere::ApplyLighting()
         Surface.Material->SetVectorParameterValue(TEXT("EmissiveColor"),Surface.OriginalColor*Night);
     if (RoadMaterial)
     {
-        RoadMaterial->SetScalarParameterValue(TEXT("Roughness"),FMath::Lerp(OriginalRoadRoughness,.075f,Wetness));
-        RoadMaterial->SetVectorParameterValue(TEXT("BaseColor"),OriginalRoadColor*FMath::Lerp(1.f,.62f,Wetness));
+        // Wet asphalt should catch broad headlight and streetlight reflections
+        // without turning the whole road into a continuous mirror-like puddle.
+        RoadMaterial->SetScalarParameterValue(TEXT("Roughness"),FMath::Lerp(OriginalRoadRoughness,.38f,Wetness));
+        RoadMaterial->SetVectorParameterValue(TEXT("BaseColor"),OriginalRoadColor*FMath::Lerp(1.f,.78f,Wetness));
     }
 }
 

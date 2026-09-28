@@ -70,6 +70,9 @@ public:
     UADVehicleEffectsComponent* GetEffects() const { return VehicleEffects; }
     EADCameraMode GetCameraMode() const { return CameraMode; }
     bool IsDrivingEnabled() const { return bDrivingEnabled; }
+#if WITH_DEV_AUTOMATION_TESTS
+    FTransform GetRecoveryTransformForAutomation() const { return RecoveryTransform; }
+#endif
 
 private:
     void BuildVehicle();

@@ -24,6 +24,6 @@
     "skyIntensity": 1.35,
     "fogDensity": 0.018,
     "streetLightSpacing": 3600,
-    "maxLocalLights": 24
+    "maxLocalLights": 12
   }
 }

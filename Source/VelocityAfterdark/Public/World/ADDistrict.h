@@ -97,8 +97,6 @@ private:
     UPROPERTY(Transient)
     TArray<TObjectPtr<UStaticMesh>> ContainerMeshes;
     UPROPERTY(Transient)
-    TArray<TObjectPtr<UStaticMesh>> StreetLampMeshes;
-    UPROPERTY(Transient)
     TObjectPtr<UStaticMesh> TrafficSignalMesh;
     // Hard reference lets the cooker discover the original CC0 static prop.
     UPROPERTY(EditDefaultsOnly, Category = "Afterdark|Environment", meta = (AllowPrivateAccess = "true"))

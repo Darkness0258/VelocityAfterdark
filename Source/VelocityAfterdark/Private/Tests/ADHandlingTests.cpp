@@ -140,8 +140,11 @@ namespace ADHandlingTests
                     return false;
                 }
             }
-            else Vehicle->SetActorLocationAndRotation(Origin, FRotator::ZeroRotator, false, nullptr,
-                ETeleportType::TeleportPhysics);
+            else if (!Vehicle->PlaceForRace(FTransform(FRotator::ZeroRotator,Origin)))
+            {
+                Test->AddError(TEXT("Unable to establish the handling fixture's safe recovery pose."));
+                return false;
+            }
             if (!bLaunchFixture)
             {
                 Chassis->SetPhysicsLinearVelocity(FVector(SeedSpeedCm, 0., 0.));
@@ -369,13 +372,15 @@ namespace ADHandlingTests
         void BeginRecovery(UWorld* World)
         {
             DestroyObstacle();
+            const FTransform ExpectedRecovery=Vehicle->GetRecoveryTransformForAutomation();
             Vehicle->ResetVehicle();
-            Test->AddInfo(FString::Printf(TEXT("Recovery destination=%s fixture-start=%s speed=%.1f cm/s up=%.3f grounded=%d."),
-                *Vehicle->GetActorLocation().ToCompactString(),*Origin.ToCompactString(),
+            Test->AddInfo(FString::Printf(TEXT("Recovery destination=%s latest-safe-pose=%s speed=%.1f cm/s up=%.3f grounded=%d."),
+                *Vehicle->GetActorLocation().ToCompactString(),*ExpectedRecovery.GetLocation().ToCompactString(),
                 Chassis->GetPhysicsLinearVelocity().Size(),Vehicle->GetActorUpVector().Z,
                 Vehicle->GetPhysics()->GetTelemetry().GroundedWheels));
-            Test->TestTrue(TEXT("Recovery returns to the most recent safe fixture area"),
-                FVector::Dist(Vehicle->GetActorLocation(), Origin) < 250.);
+            Test->TestTrue(TEXT("Recovery returns to the latest recorded safe pose"),
+                FVector::Dist(Vehicle->GetActorLocation(),ExpectedRecovery.GetLocation())<1.
+                && Vehicle->GetActorQuat().Equals(ExpectedRecovery.GetRotation(),.01f));
             Test->TestTrue(TEXT("Recovery clears linear and angular momentum"),
                 Chassis->GetPhysicsLinearVelocity().IsNearlyZero(.1)
                 && Chassis->GetPhysicsAngularVelocityInRadians().IsNearlyZero(.01));

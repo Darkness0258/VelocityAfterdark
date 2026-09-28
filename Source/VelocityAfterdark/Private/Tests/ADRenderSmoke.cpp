@@ -83,6 +83,20 @@ void ADStartRenderSmoke(UWorld* World)
             if (!*bStoryStarted) UE_LOG(LogTemp,Error,TEXT("AFTERDARK_CUTSCENE_START_FAILED"));
         }
     });
+    Later(44.f, [Controller,bStoryStarted]()
+    {
+        auto* PC=Controller();
+        const bool bVoicePlaying=*bStoryStarted && PC && PC->GetCinematic()
+            && PC->GetCinematic()->IsStoryVoiceoverPlaying();
+        if (bVoicePlaying)
+        {
+            UE_LOG(LogTemp,Display,TEXT("AFTERDARK_VOICEOVER_SMOKE_COMPLETE: arrival radio SoundWave is playing"));
+        }
+        else
+        {
+            UE_LOG(LogTemp,Error,TEXT("AFTERDARK_VOICEOVER_SMOKE_FAILED: arrival voiceover did not start"));
+        }
+    });
     Later(43.f, [Capture]() { Capture(TEXT("AfterdarkArrival01.png")); });
     Later(46.f, [Capture]() { Capture(TEXT("AfterdarkArrival02.png")); });
     Later(50.f, [Capture]() { Capture(TEXT("AfterdarkArrival03.png")); });

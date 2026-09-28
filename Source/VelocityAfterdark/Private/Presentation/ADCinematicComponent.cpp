@@ -7,9 +7,11 @@
 #include "Camera/CameraActor.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
+#include "Kismet/GameplayStatics.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 #include "InputCoreTypes.h"
@@ -19,6 +21,7 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Misc/FileHelper.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
@@ -55,9 +58,38 @@ bool UADCinematicComponent::EnterPhoto() { return Enter(EADCinematicMode::Photo)
 bool UADCinematicComponent::EnterReplay() { return Enter(EADCinematicMode::Replay); }
 bool UADCinematicComponent::PlayArrivalCutscene()
 {
-    return StartStory(TEXT("ARRIVAL / DOCKSIDE"),TEXT("NOVA CITY  /  11:43 PM"),
+    const bool bStarted=StartStory(TEXT("ARRIVAL / DOCKSIDE"),TEXT("NOVA CITY  /  11:43 PM"),
         TEXT("A rain-muted broadcast carries a name through the static: Tidewire. Beneath the highway, three cars wait for a driver no one knows."),
         TEXT("FOLLOW THE SIGNAL"),false);
+    if (bStarted) PlayArrivalVoiceover();
+    return bStarted;
+}
+
+void UADCinematicComponent::PlayArrivalVoiceover()
+{
+    if (!ArrivalVoiceover)
+        ArrivalVoiceover=LoadObject<USoundBase>(nullptr,TEXT("/Game/Velocity/Audio/Voice/VO_ArrivalBroadcast.VO_ArrivalBroadcast"));
+    if (!ArrivalVoiceover)
+    {
+        UE_LOG(LogTemp,Warning,TEXT("Arrival voiceover is missing; the authored cutscene captions remain active."));
+        return;
+    }
+    StoryVoiceover=UGameplayStatics::SpawnSound2D(this,ArrivalVoiceover,0.86f,1.f,0.f,nullptr,false,true);
+    if (!StoryVoiceover) UE_LOG(LogTemp,Warning,TEXT("Arrival voiceover could not be started; captions remain active."));
+}
+
+void UADCinematicComponent::StopStoryVoiceover()
+{
+    if (StoryVoiceover)
+    {
+        StoryVoiceover->Stop();
+        StoryVoiceover=nullptr;
+    }
+}
+
+bool UADCinematicComponent::IsStoryVoiceoverPlaying() const
+{
+    return StoryVoiceover && StoryVoiceover->IsPlaying();
 }
 
 bool UADCinematicComponent::PlayCareerBriefing(const FString& ChapterTitle,const FString& CrewLine,const FString& Narrative)
@@ -83,7 +115,9 @@ bool UADCinematicComponent::StartStory(const FString& Title,const FString& Attri
 
 const FString& UADCinematicComponent::GetStorySubtitle() const
 {
-    if (StorySeconds<8.f) return StoryNarrative;
+    // The opening broadcast is a measured 9.5-second VO take; keep its
+    // complete line onscreen until the radio handoff begins at ten seconds.
+    if (StorySeconds<10.f) return StoryNarrative;
     return StoryClosing;
 }
 
@@ -438,6 +472,7 @@ void UADCinematicComponent::Capture()
 void UADCinematicComponent::Leave()
 {
     if (!IsActive()) return;
+    StopStoryVoiceover();
     auto* PC=Cast<AADPlayerController>(GetOwner());
     const bool bStartCareerRace=Mode==EADCinematicMode::Story && bContinueToCareerRace;
     if (Vehicle.IsValid() && !Vehicle->IsActorBeingDestroyed())

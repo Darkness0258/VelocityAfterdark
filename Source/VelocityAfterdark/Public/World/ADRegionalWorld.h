@@ -9,6 +9,7 @@ class AADVehiclePawn;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UPointLightComponent;
 class UStaticMesh;
 
 struct FADRegionalRoad
@@ -64,6 +65,8 @@ private:
     void BuildCells();
     void UpdateStreaming();
     void UpdateWeatherMaterials();
+    void BuildStreetLightPool();
+    void UpdateStreetLightPool();
     void LoadCell(int32 Index);
     void UnloadCell(int32 Index);
     bool IsRoadClear(FBox2D Footprint, double MarginCm) const;
@@ -71,7 +74,8 @@ private:
         UStaticMesh* Mesh, bool bCollision);
     UMaterialInstanceDynamic* MakeMaterial(const TCHAR* Name, const TCHAR* Asset,
         FLinearColor Color, float Roughness, float Metallic);
-    void AddResident(FName Material, FVector Position, FVector Size, FRotator Rotation = FRotator::ZeroRotator);
+    void AddResident(FName Material, FVector Position, FVector Size, FRotator Rotation = FRotator::ZeroRotator,
+        bool bCylinder = false);
     void AddResidentCollision(FName Surface, FVector Position, FVector Size,
         FRotator Rotation = FRotator::ZeroRotator);
     void AddResidentMesh(FName BatchKey, UStaticMesh* Mesh, FVector Position, FVector Size,
@@ -85,7 +89,6 @@ private:
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> IndustrialWarehouses;
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> IndustrialContainers;
     UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> IndustrialDetails;
-    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> RoadLamps;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> TrafficSignal;
     UPROPERTY(Transient) TObjectPtr<UStaticMesh> ConstructionBarrier;
     UPROPERTY(Transient) TMap<FName,TObjectPtr<UMaterialInterface>> Materials;
@@ -94,10 +97,15 @@ private:
     UPROPERTY(Transient) TArray<TObjectPtr<UInstancedStaticMeshComponent>> ActiveComponents;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> WetAsphalt;
     UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> Windows;
+    UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StreetLampGlow;
+    UPROPERTY(Transient) TArray<TObjectPtr<UPointLightComponent>> StreetLightPool;
     TWeakObjectPtr<AADVehiclePawn> Player;
     TWeakObjectPtr<AADAtmosphere> Atmosphere;
     TArray<FADRegionalRoad> Roads;
     TArray<FADRegionalRoad> LegacyRoads;
+    TArray<FVector> StreetLampPositions;
+    TArray<int32> NearestStreetLightIndices;
+    TArray<double> NearestStreetLightDistances;
     TArray<FRegion> Regions;
     TArray<FCell> Cells;
     TArray<int32> CellPriority;
@@ -112,6 +120,8 @@ private:
     float RoadLengthMeters = 0.f;
     int32 CellOperationsPerUpdate = 2;
     int32 MaximumLoadedCells = 24;
+    static constexpr int32 RegionalStreetLightCount = 8;
+    static constexpr double MaximumStreetLightRangeCm = 30000.;
     int32 LoadedCellCount = 0;
     FString CurrentDistrict = TEXT("Dockside");
     FString CurrentDistrictId = TEXT("nova_dockside");

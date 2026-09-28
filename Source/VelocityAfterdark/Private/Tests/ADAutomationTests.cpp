@@ -4,11 +4,63 @@
 #include "Core/ADVehicleMath.h"
 #include "Vehicle/ADVehicleDefinition.h"
 #include "World/ADPhysicalSurface.h"
+#include "World/ADTrafficManager.h"
+#include "Presentation/ADMapComponent.h"
+#include "Sound/SoundWave.h"
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformTime.h"
 #include <limits>
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADTrafficSignalPhaseTest,"Afterdark.Runtime.Traffic.SignalPhases",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FADTrafficSignalPhaseTest::RunTest(const FString& Parameters)
+{
+    constexpr float Green=20.f,Amber=3.f,Red=8.f;
+    using Phase=EADTrafficSignalPhase;
+    TestTrue(TEXT("Cycle begins green"),AADTrafficManager::GetSignalPhaseAtTime(0.f,Green,Amber,Red)==Phase::Green);
+    TestTrue(TEXT("Green remains active until its configured boundary"),AADTrafficManager::GetSignalPhaseAtTime(19.99f,Green,Amber,Red)==Phase::Green);
+    TestTrue(TEXT("Amber follows green"),AADTrafficManager::GetSignalPhaseAtTime(20.f,Green,Amber,Red)==Phase::Amber);
+    TestTrue(TEXT("Amber lasts for its complete configured interval"),AADTrafficManager::GetSignalPhaseAtTime(22.99f,Green,Amber,Red)==Phase::Amber);
+    TestTrue(TEXT("Red follows amber"),AADTrafficManager::GetSignalPhaseAtTime(23.f,Green,Amber,Red)==Phase::Red);
+    TestTrue(TEXT("The cycle wraps back to green"),AADTrafficManager::GetSignalPhaseAtTime(31.f,Green,Amber,Red)==Phase::Green);
+    TestTrue(TEXT("Invalid phase durations fail conservatively to red"),AADTrafficManager::GetSignalPhaseAtTime(1.f,0.f,Amber,Red)==Phase::Red);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADMinimapProjectionTest,"Afterdark.Data.MinimapProjection",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FADMinimapProjectionTest::RunTest(const FString& Parameters)
+{
+    const FVector2D Origin(12000.,-8500.);
+    const FVector2D East(1.,0.),North(0.,1.);
+    const FVector2D Center=ADMinimapLayout::Project(Origin,Origin,East);
+    TestTrue(TEXT("Player is centred on its own minimap"),Center.IsNearlyZero());
+    const FVector2D Ahead=ADMinimapLayout::Project(Origin+FVector2D(10000.,0.),Origin,East);
+    TestTrue(TEXT("Heading-up projection places the road ahead above the player"),Ahead.X==0. && Ahead.Y<0.);
+    const FVector2D Right=ADMinimapLayout::Project(Origin+FVector2D(0.,10000.),Origin,East);
+    TestTrue(TEXT("Roads on the driver's right appear on the right"),Right.X>0. && Right.Y==0.);
+    const FVector2D TurnedAhead=ADMinimapLayout::Project(Origin+FVector2D(0.,10000.),Origin,North);
+    TestTrue(TEXT("Player heading rotates world roads under the fixed vehicle marker"),TurnedAhead.X==0. && TurnedAhead.Y<0.);
+    const FVector2D InvalidHeading=ADMinimapLayout::Project(Origin+FVector2D(10000.,0.),Origin,FVector2D::ZeroVector);
+    TestTrue(TEXT("Degenerate heading uses a stable eastward fallback"),InvalidHeading.Y<0.);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADArrivalVoiceoverAssetTest,"Afterdark.Runtime.Audio.ArrivalVoiceover",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FADArrivalVoiceoverAssetTest::RunTest(const FString& Parameters)
+{
+    USoundWave* Voice=LoadObject<USoundWave>(nullptr,TEXT("/Game/Velocity/Audio/Voice/VO_ArrivalBroadcast.VO_ArrivalBroadcast"));
+    TestNotNull(TEXT("Opening broadcast imports as a loadable SoundWave"),Voice);
+    if (!Voice) return false;
+    TestTrue(TEXT("Broadcast clip fits the ten-second subtitle window"),Voice->Duration>=1.f && Voice->Duration<=10.f);
+    return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FADVehicleDataTest, "Afterdark.Data.VehicleDefinition",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

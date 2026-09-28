@@ -2,6 +2,7 @@
 #include "World/ADPhysicalSurface.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -82,6 +83,7 @@ void AADRegionalWorld::BeginPlay()
         return;
     }
     BuildResidentRoads();
+    BuildStreetLightPool();
     BuildCells();
     bReady = true;
     for (TActorIterator<AADAtmosphere> It(GetWorld()); It; ++It) { Atmosphere = *It; break; }
@@ -265,14 +267,14 @@ bool AADRegionalWorld::LoadMaterials()
             {TEXT("SM_Kenney_Industrial_ContainerA"),TEXT("SM_Kenney_Industrial_ContainerC")},IndustrialContainers)
         || !LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitIndustrial"),
             {TEXT("SM_Kenney_Industrial_ChimneyLarge"),TEXT("SM_Kenney_Industrial_TankLarge"),
-             TEXT("SM_Kenney_Industrial_WaterTower")},IndustrialDetails)
-        || !LoadKitFamily(TEXT("/Game/Velocity/External/KenneyCityKitRoads"),
-            {TEXT("SM_Kenney_Roads_LampCurved"),TEXT("SM_Kenney_Roads_LampSquare")},RoadLamps))
+             TEXT("SM_Kenney_Industrial_WaterTower")},IndustrialDetails))
         return false;
     TrafficSignal = LoadKitMesh(TEXT("/Game/Velocity/External/KenneyCityKitRoads"),TEXT("SM_Kenney_Roads_TrafficLight"));
     ConstructionBarrier = LoadKitMesh(TEXT("/Game/Velocity/External/KenneyCityKitRoads"),TEXT("SM_Kenney_Roads_ConstructionBarrier"));
     if (!TrafficSignal || !ConstructionBarrier) return false;
-    WetAsphalt = MakeMaterial(TEXT("Asphalt"),TEXT("M_Asphalt"),FLinearColor(.022f,.028f,.034f),.27f,.08f);
+    // Use the same publisher-sourced PBR asphalt as the resident district roads;
+    // falling back to the flat base material made streamed roads look unrelated.
+    WetAsphalt = MakeMaterial(TEXT("Asphalt"),TEXT("M_Asphalt_PolyHaven"),FLinearColor(.58f,.61f,.63f),.55f,0.f);
     auto* White = MakeMaterial(TEXT("White"),TEXT("M_RoadMarking"),FLinearColor(.62f,.65f,.61f),.48f,0.f);
     auto* Yellow = MakeMaterial(TEXT("Yellow"),TEXT("M_RoadYellow"),FLinearColor(.73f,.46f,.08f),.52f,0.f);
     auto* Concrete = MakeMaterial(TEXT("Concrete"),TEXT("M_Concrete"),FLinearColor(.23f,.24f,.23f),.8f,0.f);
@@ -284,7 +286,9 @@ bool AADRegionalWorld::LoadMaterials()
     auto* Rock = MakeMaterial(TEXT("Rock"),TEXT("M_Concrete"),FLinearColor(.13f,.145f,.12f),.97f,0.f);
     auto* Rust = MakeMaterial(TEXT("Rust"),TEXT("M_ContainerRust"),FLinearColor(.32f,.095f,.045f),.68f,.32f);
     Windows = MakeMaterial(TEXT("Windows"),TEXT("M_WindowWarm"),FLinearColor(.72f,.45f,.19f),.24f,.1f);
-    if (!WetAsphalt || !White || !Yellow || !Concrete || !Metal || !Glass || !Foliage || !Wood || !Sand || !Rock || !Rust || !Windows)
+    StreetLampGlow = MakeMaterial(TEXT("StreetLampGlow"),TEXT("M_EmissiveWhite"),FLinearColor(1.f,.48f,.18f),.24f,0.f);
+    if (StreetLampGlow) StreetLampGlow->SetVectorParameterValue(TEXT("EmissiveColor"),FLinearColor(3.2f,1.25f,.36f));
+    if (!WetAsphalt || !White || !Yellow || !Concrete || !Metal || !Glass || !Foliage || !Wood || !Sand || !Rock || !Rust || !Windows || !StreetLampGlow)
     { LoadError = TEXT("Regional scenery material assets are incomplete."); return false; }
     return true;
 }
@@ -311,10 +315,12 @@ UInstancedStaticMeshComponent* AADRegionalWorld::CreateBatch(FName Name, UMateri
     return Batch;
 }
 
-void AADRegionalWorld::AddResident(FName Material, FVector Position, FVector Size, FRotator Rotation)
+void AADRegionalWorld::AddResident(FName Material, FVector Position, FVector Size, FRotator Rotation, bool bCylinder)
 {
-    TObjectPtr<UInstancedStaticMeshComponent>& Batch = ResidentBatches.FindOrAdd(Material);
-    if (!Batch) Batch = CreateBatch(FName(*(TEXT("Resident")+Material.ToString())),Materials.FindChecked(Material),Cube,Material == TEXT("Asphalt"));
+    const FName BatchKey=bCylinder ? FName(*(Material.ToString()+TEXT("_Cylinder"))) : Material;
+    TObjectPtr<UInstancedStaticMeshComponent>& Batch = ResidentBatches.FindOrAdd(BatchKey);
+    if (!Batch) Batch = CreateBatch(FName(*(TEXT("Resident")+BatchKey.ToString())),Materials.FindChecked(Material),
+        bCylinder ? Cylinder.Get() : Cube.Get(),Material == TEXT("Asphalt"));
     Batch->AddInstance(FTransform(Rotation,Position,Size/100.f));
 }
 
@@ -404,8 +410,8 @@ void AADRegionalWorld::BuildResidentRoads()
             }
         }
 
-        // Modular kit lights are instanced by mesh, kept outside the driveable
-        // asphalt and omitted at junction approaches to protect sightlines.
+        // Modern roadside LED masts use small instanced parts instead of a
+        // stretched kit mesh. Their collision proxy covers only the pole.
         for (double Distance = 3000.; Distance < Delta.Size()-2000.; Distance += 5000.)
         {
             const FVector2D P = Road.Start+Direction*Distance;
@@ -418,12 +424,21 @@ void AADRegionalWorld::BuildResidentRoads()
             for (int32 SideIndex = 0; SideIndex < 2; ++SideIndex)
             {
                 const float Sign = SideIndex == 0 ? -1.f : 1.f;
-                UStaticMesh* Lamp = RoadLamps[(FMath::FloorToInt(Distance/5000.)+SideIndex)%RoadLamps.Num()].Get();
-                const float LampHeading = Heading+(Sign > 0.f ? 180.f : 0.f);
-                const FVector LampPosition(P+Side*(Sign*(RoadWidth*.5+550.f)),410.f);
-                const FRotator LampRotation(0,LampHeading,0);
-                AddResidentMesh(Lamp->GetFName(),Lamp,LampPosition,FVector(70.f,220.f,820.f),LampRotation);
-                AddResidentCollision(TEXT("Concrete"),LampPosition,FVector(70.f,220.f,820.f),LampRotation);
+                const FVector PoleBase(P+Side*(Sign*(RoadWidth*.5+320.f)),0.f);
+                const FVector2D TowardRoad=-Side*Sign;
+                const float ArmYaw=FMath::RadiansToDegrees(FMath::Atan2(TowardRoad.Y,TowardRoad.X));
+                const FRotator ArmRotation(0.f,ArmYaw,0.f);
+                const FVector Luminaire(PoleBase+FVector(TowardRoad*360.f,852.f));
+                const FRotator RoadRotation(0.f,Heading,0.f);
+
+                AddResident(TEXT("Concrete"),PoleBase+FVector(0.f,0.f,18.f),FVector(54.f,54.f,36.f),FRotator::ZeroRotator,true);
+                AddResident(TEXT("Metal"),PoleBase+FVector(0.f,0.f,350.f),FVector(28.f,28.f,700.f),FRotator::ZeroRotator,true);
+                AddResident(TEXT("Metal"),PoleBase+FVector(0.f,0.f,758.f),FVector(18.f,18.f,180.f),FRotator::ZeroRotator,true);
+                AddResident(TEXT("Metal"),PoleBase+FVector(TowardRoad*175.f,837.f),FVector(350.f,14.f,14.f),ArmRotation);
+                AddResident(TEXT("Metal"),Luminaire,FVector(126.f,54.f,20.f),RoadRotation);
+                AddResident(TEXT("StreetLampGlow"),Luminaire+FVector(0.f,0.f,-14.f),FVector(98.f,34.f,5.f),RoadRotation);
+                AddResidentCollision(TEXT("Concrete"),PoleBase+FVector(0.f,0.f,425.f),FVector(32.f,32.f,850.f));
+                StreetLampPositions.Add(Luminaire+FVector(0.f,0.f,-44.f));
             }
         }
 
@@ -712,12 +727,86 @@ void AADRegionalWorld::BindAtmosphere(AADAtmosphere* Actor)
 void AADRegionalWorld::UpdateWeatherMaterials()
 {
     const float Wetness = Atmosphere.IsValid() ? Atmosphere->GetWetness() : 0.f;
-    WetAsphalt->SetScalarParameterValue(TEXT("Roughness"),FMath::Lerp(.27f,.075f,Wetness));
-    WetAsphalt->SetVectorParameterValue(TEXT("BaseColor"),FLinearColor(.022f,.028f,.034f)*FMath::Lerp(1.f,.62f,Wetness));
+    WetAsphalt->SetScalarParameterValue(TEXT("Roughness"),FMath::Lerp(.55f,.38f,Wetness));
+    WetAsphalt->SetVectorParameterValue(TEXT("BaseColor"),FLinearColor(.58f,.61f,.63f)*FMath::Lerp(1.f,.78f,Wetness));
     const double Hour = Atmosphere.IsValid() ? Atmosphere->GetHour() : 23.;
     const float SolarElevation = FMath::Sin(static_cast<float>((Hour-6.)*UE_DOUBLE_PI/12.));
     const float Night = 1.f-FMath::Clamp((SolarElevation+.12f)/.22f,0.f,1.f);
     Windows->SetVectorParameterValue(TEXT("EmissiveColor"),FLinearColor(1.8f,1.1f,.45f)*Night);
+    StreetLampGlow->SetVectorParameterValue(TEXT("EmissiveColor"),FLinearColor(3.2f,1.25f,.36f)*Night);
+}
+
+void AADRegionalWorld::BuildStreetLightPool()
+{
+    StreetLightPool.Reserve(RegionalStreetLightCount);
+    NearestStreetLightIndices.Init(INDEX_NONE,RegionalStreetLightCount);
+    NearestStreetLightDistances.Init(FMath::Square(MaximumStreetLightRangeCm),RegionalStreetLightCount);
+    for (int32 Index=0;Index<RegionalStreetLightCount;++Index)
+    {
+        const FName Name(*FString::Printf(TEXT("RegionalStreetLight_%02d"),Index));
+        auto* Light=NewObject<UPointLightComponent>(this,MakeUniqueObjectName(this,UPointLightComponent::StaticClass(),Name));
+        if (!Light) continue;
+        Light->SetupAttachment(RootComponent);
+        Light->SetMobility(EComponentMobility::Movable);
+        Light->SetLightColor(FLinearColor(1.f,.68f,.40f));
+        Light->SetIntensity(7200.f);
+        Light->SetAttenuationRadius(2600.f);
+        Light->SetCastShadows(false);
+        Light->SetAffectTranslucentLighting(false);
+        Light->SetVisibility(false);
+        AddInstanceComponent(Light);
+        Light->RegisterComponent();
+        StreetLightPool.Add(Light);
+    }
+    if (StreetLightPool.Num()!=RegionalStreetLightCount)
+        UE_LOG(LogADRegionalWorld,Warning,TEXT("Street lamp local-light pool is incomplete: %d/%d."),StreetLightPool.Num(),RegionalStreetLightCount);
+}
+
+void AADRegionalWorld::UpdateStreetLightPool()
+{
+    if (StreetLightPool.IsEmpty()) return;
+    const AADVehiclePawn* Car=Player.Get();
+    const bool bDriving=IsValid(Car) && !Car->IsInGarage();
+    const FVector PlayerPosition=bDriving ? Car->GetActorLocation() : FVector::ZeroVector;
+    const double MaximumDistanceSquared=FMath::Square(MaximumStreetLightRangeCm);
+    for (int32 Slot=0;Slot<StreetLightPool.Num();++Slot)
+    {
+        NearestStreetLightIndices[Slot]=INDEX_NONE;
+        NearestStreetLightDistances[Slot]=MaximumDistanceSquared;
+    }
+    if (bDriving)
+    {
+        for (int32 LampIndex=0;LampIndex<StreetLampPositions.Num();++LampIndex)
+        {
+            const double DistanceSquared=FVector::DistSquared2D(PlayerPosition,StreetLampPositions[LampIndex]);
+            if (DistanceSquared>=MaximumDistanceSquared) continue;
+            for (int32 Slot=0;Slot<StreetLightPool.Num();++Slot)
+            {
+                if (DistanceSquared>=NearestStreetLightDistances[Slot]) continue;
+                for (int32 Shift=StreetLightPool.Num()-1;Shift>Slot;--Shift)
+                {
+                    NearestStreetLightIndices[Shift]=NearestStreetLightIndices[Shift-1];
+                    NearestStreetLightDistances[Shift]=NearestStreetLightDistances[Shift-1];
+                }
+                NearestStreetLightIndices[Slot]=LampIndex;
+                NearestStreetLightDistances[Slot]=DistanceSquared;
+                break;
+            }
+        }
+    }
+    const double Hour=Atmosphere.IsValid() ? Atmosphere->GetHour() : 23.;
+    const float SolarElevation=FMath::Sin(static_cast<float>((Hour-6.)*UE_DOUBLE_PI/12.));
+    const float Night=1.f-FMath::Clamp((SolarElevation+.12f)/.22f,0.f,1.f);
+    for (int32 Slot=0;Slot<StreetLightPool.Num();++Slot)
+    {
+        UPointLightComponent* Light=StreetLightPool[Slot].Get();
+        if (!IsValid(Light)) continue;
+        const int32 LampIndex=NearestStreetLightIndices.IsValidIndex(Slot) ? NearestStreetLightIndices[Slot] : INDEX_NONE;
+        const bool bActive=LampIndex!=INDEX_NONE && Night>.025f;
+        if (bActive) Light->SetWorldLocation(StreetLampPositions[LampIndex]);
+        Light->SetIntensity(7200.f*Night);
+        Light->SetVisibility(bActive);
+    }
 }
 
 void AADRegionalWorld::UpdateStreaming()
@@ -761,5 +850,6 @@ void AADRegionalWorld::Tick(float DeltaSeconds)
     if (TickElapsed < .1f) return;
     TickElapsed = 0.f;
     UpdateWeatherMaterials();
+    UpdateStreetLightPool();
     UpdateStreaming();
 }

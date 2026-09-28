@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "lines": [
+    {
+      "id": "arrival_broadcast",
+      "asset": "VO_ArrivalBroadcast",
+      "voice": "en-US-GuyNeural",
+      "rate": "-8%",
+      "pitch": "-4Hz",
+      "radioFilter": true,
+      "text": "A rain-muted broadcast carries a name through the static: Tidewire. Beneath the highway, three cars wait for a driver no one knows."
+    }
+  ]
+}

@@ -19,6 +19,21 @@ namespace ADMapLayout
     { const FVector2D Relative((Canvas.X-X-Width*.5f)/(WorldScale*Zoom),-(Canvas.Y-Y-Height*.5f)/(WorldScale*Zoom)); return Pan+Relative; }
 }
 
+/** Player-centred heading-up minimap projection, in reference HUD pixels. */
+namespace ADMinimapLayout
+{
+    constexpr float PixelsPerCm=.0024f;
+    inline FVector2D Project(FVector2D World,FVector2D Player,FVector2D Forward)
+    {
+        FVector2D Heading=Forward.GetSafeNormal();
+        if (Heading.IsNearlyZero()) Heading=FVector2D(1.,0.);
+        const FVector2D Delta=World-Player;
+        const FVector2D Right(-Heading.Y,Heading.X);
+        return FVector2D(FVector2D::DotProduct(Delta,Right)*PixelsPerCm,
+            -FVector2D::DotProduct(Delta,Heading)*PixelsPerCm);
+    }
+}
+
 /** Offline map modal: owns pause/input restoration and discovery filtering. */
 UCLASS()
 class VELOCITYAFTERDARK_API UADMapComponent : public UActorComponent

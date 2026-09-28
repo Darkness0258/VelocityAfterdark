@@ -183,7 +183,6 @@ bool AADDistrict::LoadDistrictArt()
     };
     const TCHAR* Commercial=TEXT("/Game/Velocity/External/KenneyCityKitCommercial");
     const TCHAR* Industrial=TEXT("/Game/Velocity/External/KenneyCityKitIndustrial");
-    const TCHAR* RoadsKit=TEXT("/Game/Velocity/External/KenneyCityKitRoads");
     if (!LoadFamily(Commercial,
             {TEXT("SM_Kenney_Commercial_SkyscraperA"),TEXT("SM_Kenney_Commercial_SkyscraperB"),
              TEXT("SM_Kenney_Commercial_SkyscraperC"),TEXT("SM_Kenney_Commercial_SkyscraperD"),
@@ -196,9 +195,7 @@ bool AADDistrict::LoadDistrictArt()
              TEXT("SM_Kenney_Industrial_BuildingH"),TEXT("SM_Kenney_Industrial_BuildingM"),
              TEXT("SM_Kenney_Industrial_BuildingQ"),TEXT("SM_Kenney_Industrial_BuildingT")},IndustrialWarehouseMeshes)
         || !LoadFamily(Industrial,
-            {TEXT("SM_Kenney_Industrial_ContainerA"),TEXT("SM_Kenney_Industrial_ContainerC")},ContainerMeshes)
-        || !LoadFamily(RoadsKit,
-            {TEXT("SM_Kenney_Roads_LampCurved"),TEXT("SM_Kenney_Roads_LampSquare")},StreetLampMeshes))
+            {TEXT("SM_Kenney_Industrial_ContainerA"),TEXT("SM_Kenney_Industrial_ContainerC")},ContainerMeshes))
         return false;
     TrafficSignalMesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Velocity/External/KenneyCityKitRoads/SM_Kenney_Roads_TrafficLight.SM_Kenney_Roads_TrafficLight"));
     if (!TrafficSignalMesh)
@@ -601,15 +598,24 @@ void AADDistrict::BuildStreetFurniture()
             for (const float Sign : { -1.f, 1.f })
             {
                 const FVector2D Pole = P + Side * (Sign * (RoadWidth * .5 + 380));
-                const FVector2D Lamp = P + Side * (Sign * (RoadWidth * .5 - 40));
-                const int32 LampIndex=(FMath::FloorToInt(Distance/StreetLightSpacing)+(Sign>0.f ? 1 : 0))%StreetLampMeshes.Num();
-                const float LampYaw=Heading+(Sign>0.f ? 180.f : 0.f);
-                AddDistrictMesh(StreetLampMeshes[LampIndex],FVector((Pole+Lamp)*.5,520.f),
-                    FVector(70.f,260.f,1040.f),LampYaw);
-                AddBox(TEXT("M_Concrete"),FVector((Pole+Lamp)*.5,520.f),FVector(70.f,260.f,1040.f),true,LampYaw);
-                const bool bWarm = P.Y <= 0;
-                AddBox(bWarm ? TEXT("M_WindowWarm") : TEXT("M_EmissiveWhite"), FVector(Lamp, 1030), FVector(100, 80, 16));
-                Lamps.Add({ FVector(Lamp, 1000), bWarm });
+                const FVector2D TowardRoad=-Side*Sign;
+                const FVector2D Lamp=Pole+TowardRoad*420.f;
+                const float ArmYaw=FMath::RadiansToDegrees(FMath::Atan2(TowardRoad.Y,TowardRoad.X));
+                const FVector Luminaire(Lamp,850.f);
+                const bool bWarm=P.Y<=0.f;
+                const FName LensMaterial=bWarm ? FName(TEXT("M_WindowWarm")) : FName(TEXT("M_EmissiveWhite"));
+
+                AddCylinder(TEXT("M_Concrete"),FVector(Pole,20.f),FVector(52.f,52.f,40.f));
+                AddCylinder(TEXT("M_Metal"),FVector(Pole,370.f),FVector(28.f,28.f,740.f));
+                AddCylinder(TEXT("M_Metal"),FVector(Pole,750.f),FVector(18.f,18.f,190.f));
+                AddBox(TEXT("M_Metal"),FVector(Pole+TowardRoad*210.f,835.f),FVector(420.f,14.f,14.f),false,ArmYaw);
+                AddBox(TEXT("M_Metal"),FVector(Lamp,850.f),FVector(132.f,54.f,20.f),false,Heading);
+                AddBox(TEXT("M_Metal"),FVector(Pole+TowardRoad*34.f,814.f),FVector(16.f,16.f,42.f));
+                AddBox(LensMaterial,FVector(Lamp,833.f),FVector(98.f,34.f,5.f),false,Heading);
+                // The collision primitive follows the narrow mast only, so a car
+                // cannot snag on the former oversized art bounding box.
+                AddBox(TEXT("M_Concrete"),FVector(Pole,410.f),FVector(32.f,32.f,820.f),true);
+                Lamps.Add({ FVector(Lamp, 800.f), bWarm });
             }
         }
     }
@@ -649,9 +655,9 @@ void AADDistrict::BuildStreetFurniture()
         Light->SetupAttachment(RootComponent);
         Light->SetMobility(EComponentMobility::Movable);
         Light->SetRelativeLocation(Lamps[Index].Position);
-        Light->SetLightColor(Lamps[Index].bWarm ? FLinearColor(1.f, .62f, .3f) : FLinearColor(.52f, .73f, 1.f));
-        Light->SetIntensity(12000.f);
-        Light->SetAttenuationRadius(2800.f);
+        Light->SetLightColor(Lamps[Index].bWarm ? FLinearColor(1.f,.68f,.40f) : FLinearColor(.72f,.84f,1.f));
+        Light->SetIntensity(7600.f);
+        Light->SetAttenuationRadius(3200.f);
         Light->SetCastShadows(false);
         AddInstanceComponent(Light);
         Light->RegisterComponent();

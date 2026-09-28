@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import re
+import wave
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -171,6 +172,35 @@ def main() -> None:
             overlap = all(block["min"][i] < corridor_max[i] and block["max"][i] > corridor_min[i]
                           for i in (0, 1))
             require(not overlap, f"Building block {block['id']} obstructs road {road['id']}")
+
+    traffic = load_json(ROOT / "Content/Data/World/traffic.json")
+    require(traffic["schemaVersion"] == 1 and
+            5 <= traffic["greenSeconds"] <= 60 and
+            1 <= traffic["amberSeconds"] <= 8 and
+            3 <= traffic["redSeconds"] <= 30,
+            "Traffic signal green/amber/red phase settings are invalid")
+    require('GetSignalPhaseAtTime' in (ROOT / "Source/VelocityAfterdark/Private/World/ADTrafficManager.cpp").read_text(encoding="utf-8")
+            and 'amberSeconds' in (ROOT / "Source/VelocityAfterdark/Private/World/ADTrafficManager.cpp").read_text(encoding="utf-8"),
+            "Three-phase signal timing must remain data-driven and testable")
+
+    voice = load_json(ROOT / "Content/Data/Audio/voice_lines.json")
+    require(voice["schemaVersion"] == 1 and len(voice["lines"]) >= 1,
+            "Voice line catalog is missing or has an unsupported schema")
+    arrival = next((line for line in voice["lines"] if line.get("id") == "arrival_broadcast"), None)
+    require(arrival is not None and arrival["asset"] == "VO_ArrivalBroadcast" and arrival["radioFilter"],
+            "Opening radio voice cue is not configured")
+    cinematic_source = (ROOT / "Source/VelocityAfterdark/Private/Presentation/ADCinematicComponent.cpp").read_text(encoding="utf-8")
+    require(arrival["text"] in cinematic_source and "VO_ArrivalBroadcast" in cinematic_source,
+            "The opening cutscene subtitle and voice cue have drifted apart")
+    voice_source = ROOT / "Assets/VoiceSource" / f"{arrival['asset']}.wav"
+    require(voice_source.is_file(), "Generated opening voice WAV is missing; run Scripts/Audio/generate_voiceover.py")
+    with wave.open(str(voice_source), "rb") as voice_wave:
+        duration = voice_wave.getnframes() / voice_wave.getframerate()
+        require(voice_wave.getnchannels() == 1 and voice_wave.getsampwidth() == 2
+                and voice_wave.getframerate() == 24000 and 1.0 <= duration <= 10.0,
+                "Opening voice WAV must be 24 kHz, mono, 16-bit PCM, and 1-10 seconds")
+    require("import_arrival_voiceover" in (ROOT / "Scripts/Editor/bootstrap_content.py").read_text(encoding="utf-8"),
+            "Content bootstrap must import the voice cue as a cookable SoundWave")
 
     benchmark = load_json(ROOT / "Content/Data/Tests/dockside_benchmark.json")
     require(benchmark["schemaVersion"] == 1 and benchmark["id"], "Invalid benchmark schema")
