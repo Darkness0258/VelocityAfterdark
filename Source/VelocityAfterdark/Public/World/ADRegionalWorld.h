@@ -19,6 +19,13 @@ struct FADRegionalRoad
     FVector2D End = FVector2D::ZeroVector;
 };
 
+struct FADRegionalMapDistrict
+{
+    FString Name;
+    FVector2D Minimum = FVector2D::ZeroVector;
+    FVector2D Maximum = FVector2D::ZeroVector;
+};
+
 /** Resident road collision with budgeted, distance-streamed development scenery. */
 UCLASS()
 class VELOCITYAFTERDARK_API AADRegionalWorld : public AActor
@@ -41,6 +48,7 @@ public:
     float GetRoadLengthMeters() const { return RoadLengthMeters; }
     FVector2D GetGroundHalfExtent() const { return GroundHalfExtent; }
     const TArray<FADRegionalRoad>& GetRoadSegments() const { return Roads; }
+    void GetMapDistricts(TArray<FADRegionalMapDistrict>& OutDistricts) const;
     bool IsOnRegionalRoad(FVector2D Position, double MarginCm = 0.) const;
 
 private:

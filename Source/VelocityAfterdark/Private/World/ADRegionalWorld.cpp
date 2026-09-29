@@ -285,6 +285,8 @@ bool AADRegionalWorld::LoadMaterials()
     auto* Sand = MakeMaterial(TEXT("Sand"),TEXT("M_Concrete"),FLinearColor(.45f,.30f,.16f),.95f,0.f);
     auto* Rock = MakeMaterial(TEXT("Rock"),TEXT("M_Concrete"),FLinearColor(.13f,.145f,.12f),.97f,0.f);
     auto* Rust = MakeMaterial(TEXT("Rust"),TEXT("M_ContainerRust"),FLinearColor(.32f,.095f,.045f),.68f,.32f);
+    auto* CommercialFacade=MakeMaterial(TEXT("CommercialFacade"),TEXT("M_Building_PBR_V4"),FLinearColor(.24f,.27f,.30f),.72f,.08f);
+    if (CommercialFacade) Materials.Add(TEXT("KenneyCommercial"),CommercialFacade);
     Windows = MakeMaterial(TEXT("Windows"),TEXT("M_WindowWarm"),FLinearColor(.72f,.45f,.19f),.24f,.1f);
     StreetLampGlow = MakeMaterial(TEXT("StreetLampGlow"),TEXT("M_EmissiveWhite"),FLinearColor(1.f,.48f,.18f),.24f,0.f);
     if (StreetLampGlow) StreetLampGlow->SetVectorParameterValue(TEXT("EmissiveColor"),FLinearColor(3.2f,1.25f,.36f));
@@ -560,6 +562,54 @@ void AADRegionalWorld::LoadCell(int32 Index)
             AddCollisionProxy(CollisionSurface.IsNone() ? Material : CollisionSurface,Position,Size,Rotation,
                 Shape == 1 ? Cylinder.Get() : Shape == 2 ? Sphere.Get() : nullptr);
     };
+    const auto AddCommercialFacade=[&Piece,&Random](FVector2D Center,float Width,float Depth,float Height,float Yaw,bool bCoastal)
+    {
+        const FRotator BuildingRotation(0.f,Yaw,0.f);
+        const int32 Rows=FMath::Clamp(FMath::FloorToInt(Height/650.f),4,10);
+        const float WindowHeight=FMath::Clamp(Height/(Rows+1)*.58f,145.f,220.f);
+        const float FrontWindowWidth=FMath::Clamp(Width*.085f,150.f,240.f);
+        const float SideWindowWidth=FMath::Clamp(Depth*.11f,150.f,220.f);
+        const auto ToWorld=[&](float LocalX,float LocalY,float Z)
+        {
+            const FVector Offset=BuildingRotation.RotateVector(FVector(LocalX,LocalY,0.f));
+            return FVector(Center.X+Offset.X,Center.Y+Offset.Y,Z);
+        };
+        for (int32 Row=0;Row<Rows;++Row)
+        {
+            const float Z=420.f+(Row+1)*(Height-760.f)/(Rows+1);
+            for (const float Side:{-1.f,1.f})
+            {
+                for (int32 Column=-1;Column<=1;++Column)
+                {
+                    const float LocalX=Column*Width*.245f;
+                    const FName GlassMaterial=Random.FRand()<.28f ? TEXT("Windows") : TEXT("Glass");
+                    Piece(GlassMaterial,ToWorld(LocalX,Side*(Depth*.5f+9.f),Z),
+                        FVector(FrontWindowWidth,14.f,WindowHeight),0,BuildingRotation);
+                }
+                if (bCoastal && Row%3==1)
+                    Piece(TEXT("Concrete"),ToWorld(0.f,Side*(Depth*.5f+28.f),Z-WindowHeight*.72f),
+                        FVector(Width*.78f,60.f,32.f),0,BuildingRotation);
+                for (int32 Column=-1;Column<=1;Column+=2)
+                {
+                    const float LocalY=Column*Depth*.245f;
+                    const FName GlassMaterial=Random.FRand()<.28f ? TEXT("Windows") : TEXT("Glass");
+                    Piece(GlassMaterial,ToWorld(Side*(Width*.5f+9.f),LocalY,Z),
+                        FVector(SideWindowWidth,14.f,WindowHeight),0,FRotator(0.f,Yaw+90.f,0.f));
+                }
+            }
+        }
+
+        // Facade fins cast thin street-facing shadows and break up the kit's long flat walls.
+        for (const float XSide:{-1.f,1.f}) for (const float YSide:{-1.f,1.f})
+            Piece(TEXT("Concrete"),ToWorld(XSide*(Width*.5f-18.f),YSide*(Depth*.5f+17.f),Height*.5f),
+                FVector(32.f,22.f,Height*.94f),0,BuildingRotation);
+
+        // Street level gains readable recessed glazing instead of a blank tower base.
+        for (int32 Shop=-1;Shop<=1;++Shop)
+            Piece(TEXT("Glass"),ToWorld(Shop*Width*.25f,Depth*.5f+13.f,220.f),
+                FVector(Width*.19f,18.f,230.f),0,BuildingRotation);
+        Piece(TEXT("Metal"),ToWorld(0.f,Depth*.5f+25.f,365.f),FVector(Width*.86f,34.f,24.f),0,BuildingRotation);
+    };
     TArray<FBox2D> Footprints;
     int32 Placed = 0;
     for (int32 Attempt = 0; Attempt < Region.PropsPerCell*10 && Placed < Region.PropsPerCell; ++Attempt)
@@ -641,15 +691,19 @@ void AADRegionalWorld::LoadCell(int32 Index)
             UStaticMesh* Building=bSkyscraper
                 ? CommercialSkyscrapers[Random.RandRange(0,CommercialSkyscrapers.Num()-1)].Get()
                 : CommercialMidRises[Random.RandRange(0,CommercialMidRises.Num()-1)].Get();
+            const float BuildingYaw=Random.FRandRange(-180.f,180.f);
             Piece(TEXT("KenneyCommercial"),FVector(P,Height*.5f),FVector(Radius*1.72f,Radius*1.54f,Height),
-                0,FRotator(0,Random.FRandRange(-180.f,180.f),0),Building,true,TEXT("Building"));
+                0,FRotator(0,BuildingYaw,0),Building,true,TEXT("Building"));
+            AddCommercialFacade(P,Radius*1.72f,Radius*1.54f,Height,BuildingYaw,false);
         }
         else if (Region.Style == TEXT("coast"))
         {
             const float Height=Random.FRandRange(1800.f,3800.f);
             UStaticMesh* Hotel=CommercialMidRises[Random.RandRange(0,CommercialMidRises.Num()-1)].Get();
+            const float BuildingYaw=Random.FRandRange(-180.f,180.f);
             Piece(TEXT("KenneyCommercial"),FVector(P,Height*.5f),FVector(Radius*1.72f,Radius*1.45f,Height),
-                0,FRotator(0,Random.FRandRange(-180.f,180.f),0),Hotel,true,TEXT("Building"));
+                0,FRotator(0,BuildingYaw,0),Hotel,true,TEXT("Building"));
+            AddCommercialFacade(P,Radius*1.72f,Radius*1.45f,Height,BuildingYaw,true);
         }
         else // Motorsport paddock: open stands and pit structures.
         {
@@ -722,6 +776,19 @@ void AADRegionalWorld::BindVehicle(AADVehiclePawn* Car)
 void AADRegionalWorld::BindAtmosphere(AADAtmosphere* Actor)
 {
     Atmosphere = Actor;
+}
+
+void AADRegionalWorld::GetMapDistricts(TArray<FADRegionalMapDistrict>& OutDistricts) const
+{
+    OutDistricts.Reset(Regions.Num());
+    for (const FRegion& Region:Regions)
+    {
+        FADRegionalMapDistrict District;
+        District.Name=Region.Name;
+        District.Minimum=Region.Min;
+        District.Maximum=Region.Max;
+        OutDistricts.Add(MoveTemp(District));
+    }
 }
 
 void AADRegionalWorld::UpdateWeatherMaterials()

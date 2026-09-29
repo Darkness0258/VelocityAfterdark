@@ -285,6 +285,13 @@ int32 AADTrafficManager::GetEmergencyYieldCount() const
     return Count;
 }
 
+void AADTrafficManager::GetTrafficLocations(TArray<FVector2D>& OutLocations) const
+{
+    OutLocations.Reset(Cars.Num());
+    for (const AADVehiclePawn* Car:Cars)
+        if (IsValid(Car)) OutLocations.Add(FVector2D(Car->GetActorLocation()));
+}
+
 void AADTrafficManager::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);

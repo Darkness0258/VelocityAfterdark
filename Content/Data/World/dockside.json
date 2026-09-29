@@ -16,8 +16,8 @@
   "blocks": [
     {"id": "foundry_yards", "kind": "warehouse", "min": [-36500, -21500], "max": [-3500, -3500], "columns": 5, "rows": 3, "minHeight": 900, "maxHeight": 1900},
     {"id": "container_exchange", "kind": "containers", "min": [3500, -21500], "max": [36500, -3500], "columns": 7, "rows": 4, "minHeight": 280, "maxHeight": 850},
-    {"id": "glasswater", "kind": "tower", "min": [-36500, 3500], "max": [-3500, 21500], "columns": 6, "rows": 3, "minHeight": 4500, "maxHeight": 14500},
-    {"id": "signal_quarter", "kind": "midrise", "min": [3500, 3500], "max": [36500, 21500], "columns": 5, "rows": 3, "minHeight": 1800, "maxHeight": 4200}
+    {"id": "glasswater", "kind": "tower", "min": [-36500, 3500], "max": [-3500, 21500], "columns": 8, "rows": 4, "minHeight": 4500, "maxHeight": 14500},
+    {"id": "signal_quarter", "kind": "midrise", "min": [3500, 3500], "max": [36500, 21500], "columns": 8, "rows": 4, "minHeight": 1800, "maxHeight": 4200}
   ],
   "lighting": {
     "moonIntensityLux": 5.0,

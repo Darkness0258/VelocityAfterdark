@@ -381,18 +381,33 @@ public:
             PC->FlushPressedKeys();
             break;
         case 10:
-            Test->TestTrue(TEXT("Focus-loss flush clears vehicle throttle"),State.Throttle<.01f);
-            Car->ResetVehicle();
-            if (auto* Chassis = Cast<UPrimitiveComponent>(Car->GetRootComponent()))
+            if (ReverseTestSubstage==0)
             {
+                Test->TestTrue(TEXT("Focus-loss flush clears vehicle throttle"),State.Throttle<.01f);
+                Car->ResetVehicle();
+                auto* Chassis=Cast<UPrimitiveComponent>(Car->GetRootComponent());
+                if (!Test->TestNotNull(TEXT("Reverse integration has a physics chassis"),Chassis)) return true;
                 Chassis->SetPhysicsLinearVelocity(Car->GetActorRightVector()*3000.f);
                 Car->GetPhysics()->RequestReverse();
                 Test->TestEqual(TEXT("Reverse is blocked while sliding sideways at 108 km/h"),State.Gear,1);
                 Chassis->SetPhysicsLinearVelocity(FVector::ZeroVector);
-                Car->GetPhysics()->RequestReverse();
-                Test->TestEqual(TEXT("Reverse is available at standstill"),State.Gear,-1);
+                PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::V,IE_Pressed,1.f));
+                ReverseTestSubstage=1;
+                StageStart=Now;
+                return false;
             }
-            else Test->AddError(TEXT("Vehicle root is not a physics primitive"));
+            if (ReverseTestSubstage==1)
+            {
+                Test->TestEqual(TEXT("V selects reverse at standstill"),State.Gear,-1);
+                PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::V,IE_Released,0.f));
+                Car->ResetVehicle();
+                PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::S,IE_Pressed,1.f));
+                ReverseTestSubstage=2;
+                StageStart=Now;
+                return false;
+            }
+            Test->TestEqual(TEXT("Automatic brake at rest selects reverse"),State.Gear,-1);
+            PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::S,IE_Released,0.f));
             break;
         case 11:
             if (auto* Chassis = Cast<UPrimitiveComponent>(Car->GetRootComponent()))
@@ -472,6 +487,7 @@ private:
     double Deadline;
     float StageStart=0.f;
     int32 Stage=0;
+    int32 ReverseTestSubstage=0;
     FString SavedDefinitionPath;
     FVector FrozenPosition=FVector::ZeroVector;
 };

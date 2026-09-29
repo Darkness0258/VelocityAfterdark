@@ -71,7 +71,8 @@ private:
         bool bCylinder = false, UStaticMesh* MeshOverride = nullptr);
     void AddBox(FName MaterialName, const FVector& Center, const FVector& Size, bool bCollision = false, float Yaw = 0.f);
     void AddCylinder(FName MaterialName, const FVector& Center, const FVector& Size);
-    void AddDistrictMesh(UStaticMesh* Mesh, const FVector& Center, const FVector& Size, float Yaw = 0.f);
+    void AddDistrictMesh(UStaticMesh* Mesh, const FVector& Center, const FVector& Size, float Yaw = 0.f,
+        FName MaterialName = TEXT("KenneyCityKit"));
     void AddBuildingCollider(const FVector& Center, const FVector& Size, float Yaw = 0.f);
 
     UPROPERTY(VisibleAnywhere, Category = "Afterdark|Lighting")

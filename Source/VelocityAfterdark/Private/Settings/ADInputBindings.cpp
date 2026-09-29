@@ -8,6 +8,7 @@ const TArray<FADBindingSlot>& FADInputBindings::GetSlots()
         {TEXT("Keyboard.SteerLeft"),TEXT("Steering"),TEXT("STEER LEFT"),EKeys::A,false,false,true},
         {TEXT("Keyboard.SteerRight"),TEXT("Steering"),TEXT("STEER RIGHT"),EKeys::D},
         {TEXT("Keyboard.Handbrake"),TEXT("Handbrake"),TEXT("HANDBRAKE"),EKeys::SpaceBar},
+        {TEXT("Keyboard.Reverse"),TEXT("Reverse"),TEXT("REVERSE"),EKeys::V},
         {TEXT("Keyboard.Nitrous"),TEXT("Nitrous"),TEXT("NITROUS"),EKeys::LeftShift},
         {TEXT("Keyboard.Camera"),TEXT("Camera"),TEXT("CAMERA"),EKeys::C},
         {TEXT("Keyboard.Recover"),TEXT("Recover"),TEXT("RECOVER VEHICLE"),EKeys::R},
@@ -15,6 +16,7 @@ const TArray<FADBindingSlot>& FADInputBindings::GetSlots()
         {TEXT("Gamepad.Brake"),TEXT("Brake"),TEXT("BRAKE AXIS"),EKeys::Gamepad_LeftTriggerAxis,true,true},
         {TEXT("Gamepad.Steering"),TEXT("Steering"),TEXT("STEERING AXIS"),EKeys::Gamepad_LeftX,true,true},
         {TEXT("Gamepad.Handbrake"),TEXT("Handbrake"),TEXT("HANDBRAKE"),EKeys::Gamepad_FaceButton_Left,true},
+        {TEXT("Gamepad.Reverse"),TEXT("Reverse"),TEXT("REVERSE"),EKeys::Gamepad_DPad_Down,true},
         {TEXT("Gamepad.Nitrous"),TEXT("Nitrous"),TEXT("NITROUS"),EKeys::Gamepad_FaceButton_Bottom,true},
         {TEXT("Gamepad.Camera"),TEXT("Camera"),TEXT("CAMERA"),EKeys::Gamepad_FaceButton_Top,true},
         {TEXT("Gamepad.Recover"),TEXT("Recover"),TEXT("RECOVER VEHICLE"),EKeys::Gamepad_Special_Left,true}
@@ -37,12 +39,13 @@ bool FADInputBindings::IsAllowed(const FADBindingSlot& Slot,FKey Key)
         if (Slot.Action==TEXT("Steering")) return Key==EKeys::Gamepad_LeftX || Key==EKeys::Gamepad_RightX;
         if (Slot.bAxis) return Key==EKeys::Gamepad_LeftTriggerAxis || Key==EKeys::Gamepad_RightTriggerAxis;
         return Key==EKeys::Gamepad_FaceButton_Left || Key==EKeys::Gamepad_FaceButton_Bottom
-            || Key==EKeys::Gamepad_FaceButton_Top || Key==EKeys::Gamepad_Special_Left;
+            || Key==EKeys::Gamepad_FaceButton_Top || Key==EKeys::Gamepad_Special_Left
+            || Key==EKeys::Gamepad_DPad_Down;
     }
     // Preserve contextual race, garage, photo, map, transmission and menu actions.
     static const TArray<FKey> Reserved={EKeys::Escape,EKeys::Enter,EKeys::BackSpace,EKeys::Tab,
         EKeys::Up,EKeys::Down,EKeys::Left,EKeys::Right,EKeys::F,EKeys::G,EKeys::N,EKeys::P,EKeys::H,
-        EKeys::M,EKeys::Q,EKeys::E,EKeys::V,EKeys::Tilde,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,
+        EKeys::M,EKeys::Q,EKeys::E,EKeys::Tilde,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,
         EKeys::F5,EKeys::F6,EKeys::F7,EKeys::F8,EKeys::F9,EKeys::F10,EKeys::F11,EKeys::F12};
     return !Key.IsMouseButton() && !Key.IsAxis1D() && !Key.IsAxis2D() && !Key.IsAxis3D()
         && Key!=EKeys::AnyKey && !Reserved.Contains(Key);

@@ -36,6 +36,7 @@ public:
     AADPoliceDirector* GetPoliceDirector() const { return Police; }
     AADTrafficManager* GetTrafficManager() const { return Traffic; }
     AADRegionalWorld* GetRegionalWorld() const { return RegionalWorld; }
+    AADDistrict* GetDistrict() const { return District; }
     AADExplorationDirector* GetExploration() const { return Exploration; }
     FVector GetDrivingStartLocation() const;
     // Idempotent startup is shared by normal play and integrated PIE acceptance.

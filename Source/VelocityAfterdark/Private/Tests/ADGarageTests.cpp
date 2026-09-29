@@ -62,7 +62,7 @@ public:
         case 0:
             if (!Test->TestTrue(TEXT("Runtime test uses an isolated memory profile"), Ownership->InitializeProfile(TEXT(""), Error)))
             { Test->AddError(Error); return true; }
-            if (!Test->TestTrue(TEXT("Garage catalog is ready"), Ownership->IsReady()) || Ownership->GetPaints().Num() < 2
+            if (!Test->TestTrue(TEXT("Garage catalog is ready"), Ownership->IsReady()) || Ownership->GetPaints().Num() < 20
                 || Ownership->GetUpgrades().Num() != 4 || Ownership->GetTunes().Num() < 2)
             { Test->AddError(TEXT("Garage catalog lacks the phase-three entries.")); return true; }
             PC->StartDriving();
@@ -93,6 +93,9 @@ public:
             Garage->AdjustSelection(1);
             Test->TestTrue(TEXT("Paint preview selects a different catalog color"), Garage->GetDraft().PaintId != Ownership->GetProfile().PaintId);
             Test->TestTrue(TEXT("Paint preview changes the actual body material"), BodyPaint(Car).Equals(Ownership->GetPaints()[1].Color, .001f));
+            for (int32 PaintIndex=2; PaintIndex<Ownership->GetPaints().Num(); ++PaintIndex) Garage->AdjustSelection(1);
+            Test->TestTrue(TEXT("Expanded paint catalog cycles to its final paint"), Garage->GetDraft().PaintId==Ownership->GetPaints().Last().Id);
+            Test->TestTrue(TEXT("Every garage paint previews on the actual body material"), BodyPaint(Car).Equals(Ownership->GetPaints().Last().Color, .001f));
             SelectRow(Garage, 1);
             Garage->AdjustSelection(1);
             Test->TestTrue(TEXT("Upgrade preview increases real torque definition"), Garage->GetPreviewDefinition().GetTorqueNm(4000.f) > StockTorque);

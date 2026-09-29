@@ -38,6 +38,7 @@ public:
     EADTrafficSignalPhase GetSignalPhase() const { return SignalPhase; }
     static EADTrafficSignalPhase GetSignalPhaseAtTime(float TimeSeconds,float Green,float Amber,float Red);
     int32 GetTrafficCount() const { return Cars.Num(); }
+    void GetTrafficLocations(TArray<FVector2D>& OutLocations) const;
     int32 GetEmergencyYieldCount() const;
 private:
     bool LoadSettings();

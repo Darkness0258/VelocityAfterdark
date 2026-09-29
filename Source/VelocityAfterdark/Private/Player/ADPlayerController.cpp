@@ -283,6 +283,7 @@ bool AADPlayerController::InputKey(const FInputKeyEventArgs& Params)
     if (MapComponent && MapComponent->IsOpen() && (Params.Event==IE_Pressed || Params.Event==IE_Repeat))
     {
         const FKey Key=Params.Key;
+        if (Key==EKeys::Home) { MapComponent->FitWorld(); return true; }
         if (Key==EKeys::T) { MapComponent->FastTravel(); return true; }
         if (Key==EKeys::Delete || Key==EKeys::RightMouseButton) { MapComponent->ClearWaypoint(); return true; }
         if (Key==EKeys::MouseScrollUp) { MapComponent->Zoom(.12f); return true; }

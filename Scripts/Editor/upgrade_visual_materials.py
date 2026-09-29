@@ -219,6 +219,11 @@ def main():
                           imported["T_Concrete_Normal_V3"], (7.0, 7.0), 0.0)
     make_surface_material("M_Building_PBR_V3", (0.085, 0.105, 0.12), imported["T_Facade_Surface_V3"],
                           imported["T_Facade_Normal_V3"], (8.0, 12.0), 0.08)
+    # Commercial shells were nearly black under Nova City's real-time night lighting.
+    # Keep the same high-resolution facade maps, but give the building layer a readable
+    # midtone albedo so moon fill and street lamps retain visible material response.
+    make_surface_material("M_Building_PBR_V4", (0.24, 0.27, 0.30), imported["T_Facade_Surface_V3"],
+                          imported["T_Facade_Normal_V3"], (8.0, 12.0), 0.08)
     make_surface_material("M_IndustrialMetal_PBR", (0.18, 0.21, 0.24), imported["T_IndustrialMetal_Surface_V3"],
                           imported["T_IndustrialMetal_Normal_V3"], (8.0, 8.0), 0.78)
     make_surface_material("M_Rubber_PBR", (0.025, 0.028, 0.032), imported["T_Rubber_Surface_V3"],

@@ -83,6 +83,10 @@ private:
                 Weather->GetHour()>=22. && Weather->GetHour()<24. && Weather->GetWeather()==EADWeather::Rain
                 && Weather->GetRainIntensity()>=.8f && Weather->GetWetness()>=.45f);
             Test->TestTrue(TEXT("Physical traffic population is bounded"),Traffic->GetTrafficCount()>0 && Traffic->GetTrafficCount()<=4);
+            TArray<FVector2D> TrafficMapLocations;
+            Traffic->GetTrafficLocations(TrafficMapLocations);
+            Test->TestEqual(TEXT("Minimap traffic pins come from every live traffic actor"),
+                TrafficMapLocations.Num(),Traffic->GetTrafficCount());
             Test->TestTrue(TEXT("Road graph and discovery system load"),Mode->GetExploration()->IsReady());
             AADDistrict* Dockside=nullptr;
             for (TActorIterator<AADDistrict> It(World);It;++It) { Dockside=*It; break; }
@@ -127,6 +131,20 @@ private:
                 Test->TestTrue(TEXT("Map opens during free drive"),Map->IsOpen());
                 if (Map->IsOpen())
                 {
+                    const AADExplorationDirector* MapExploration=Map->GetExploration();
+                    bool bEveryRoadFits=MapExploration && MapExploration->IsReady();
+                    if (bEveryRoadFits)
+                    {
+                        const float Right=ADMapLayout::X+ADMapLayout::Width;
+                        const float Bottom=ADMapLayout::Y+ADMapLayout::Height;
+                        for (const FADRoadNetworkSegment& Road:MapExploration->GetRoadNetwork().GetSegments())
+                        {
+                            for (const FVector2D Point:{Map->Project(Road.Start),Map->Project(Road.End)})
+                                bEveryRoadFits &= Point.X>=ADMapLayout::X && Point.X<=Right
+                                    && Point.Y>=ADMapLayout::Y && Point.Y<=Bottom;
+                        }
+                    }
+                    Test->TestTrue(TEXT("Opening the full map frames every endpoint in the live road graph"),bEveryRoadFits);
                     Test->TestEqual(TEXT("Undiscovered landmark is initially selected"),
                         Map->GetSelectedLocation() ? Map->GetSelectedLocation()->Id : FString(),FString(TEXT("glasswater_lights")));
                     Map->FastTravel();

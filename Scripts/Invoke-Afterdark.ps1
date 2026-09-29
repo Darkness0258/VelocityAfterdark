@@ -76,7 +76,7 @@ switch ($Action) {
             throw 'UE did not report a successful Poly Haven asphalt import.'
         }
         $generatedContent = Join-Path $projectRoot 'Content\Velocity\Materials'
-        foreach ($asset in @('M_Asphalt_Smooth_V3.uasset','M_Concrete_PBR_V3.uasset','M_Building_PBR_V3.uasset',
+        foreach ($asset in @('M_Asphalt_Smooth_V3.uasset','M_Concrete_PBR_V3.uasset','M_Building_PBR_V3.uasset','M_Building_PBR_V4.uasset',
                 'M_IndustrialMetal_PBR.uasset','M_Rubber_PBR.uasset',
                 'Generated\T_Asphalt_Surface_V2.uasset','Generated\T_Asphalt_Normal_V2.uasset',
                 'Generated\T_Concrete_Surface_V2.uasset','Generated\T_Concrete_Normal_V2.uasset',
@@ -99,7 +99,7 @@ switch ($Action) {
                 throw "Poly Haven asphalt import did not create $asset"
             }
         }
-        Write-Host 'AFTERDARK_VISUAL_ASSETS_OK: wettable Poly Haven asphalt, five updated PBR materials and sixteen generated surface maps.'
+        Write-Host 'AFTERDARK_VISUAL_ASSETS_OK: wettable Poly Haven asphalt, six PBR materials and sixteen generated surface maps.'
     }
     'Open' {
         $mapFile = Join-Path $projectRoot 'Content\Velocity\Maps\L_Dockside.umap'

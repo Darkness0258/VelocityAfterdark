@@ -37,7 +37,9 @@ void UADMapComponent::Toggle()
     PC->FlushPressedKeys(); PC->bShowMouseCursor=true;
     FInputModeGameAndUI Input; Input.SetHideCursorDuringCapture(false);
     PC->SetInputMode(Input);
-    RebuildFilter(); bOpen=true;
+    RebuildFilter();
+    if (!bHasAutoFitted) FitWorld();
+    bOpen=true;
 }
 
 void UADMapComponent::Close()
@@ -131,6 +133,30 @@ void UADMapComponent::ClearWaypoint()
 void UADMapComponent::Zoom(float Delta)
 { if (bOpen && FMath::IsFinite(Delta)) ZoomFactor=FMath::Clamp(ZoomFactor+Delta,.65f,2.4f); }
 
+bool UADMapComponent::FitWorld()
+{
+    const AADExplorationDirector* Director=GetExploration();
+    if (!Director || !Director->IsReady()) return false;
+    FVector2D Minimum(TNumericLimits<double>::Max(),TNumericLimits<double>::Max());
+    FVector2D Maximum(-TNumericLimits<double>::Max(),-TNumericLimits<double>::Max());
+    const auto Include=[&Minimum,&Maximum](FVector2D Point)
+    {
+        if (Point.ContainsNaN()) return;
+        Minimum.X=FMath::Min(Minimum.X,Point.X); Minimum.Y=FMath::Min(Minimum.Y,Point.Y);
+        Maximum.X=FMath::Max(Maximum.X,Point.X); Maximum.Y=FMath::Max(Maximum.Y,Point.Y);
+    };
+    for (const FADRoadNetworkSegment& Road:Director->GetRoadNetwork().GetSegments())
+    { Include(Road.Start); Include(Road.End); }
+    if (const auto* Ownership=GetWorld()->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>())
+        for (const FADDiscoveryDefinition& Location:Ownership->GetDiscoveries()) Include(Location.Position);
+    if (Minimum.X>=Maximum.X || Minimum.Y>=Maximum.Y) return false;
+    PanCenter=(Minimum+Maximum)*.5;
+    MapScale=ADMapLayout::FitScale(Minimum,Maximum);
+    ZoomFactor=1.f;
+    bHasAutoFitted=true;
+    return true;
+}
+
 void UADMapComponent::Pan(FVector2D WorldDelta)
 {
     if (!bOpen || !FMath::IsFinite(WorldDelta.X) || !FMath::IsFinite(WorldDelta.Y)) return;
@@ -143,7 +169,7 @@ void UADMapComponent::SetWaypoint(FVector2D CanvasPosition)
     auto* Director=GetExploration();
     auto* Ownership=GetWorld()->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
     if (!Director || !Ownership) { Message=TEXT("MAP DATA IS UNAVAILABLE."); return; }
-    const FVector2D WorldPoint=ADMapLayout::Unproject(CanvasPosition,ZoomFactor,PanCenter);
+    const FVector2D WorldPoint=Unproject(CanvasPosition);
     TArray<FVector2D> Route;
     double DistanceCm=0.;
     FString Error;

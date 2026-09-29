@@ -22,6 +22,9 @@
 #include "Online/ADOnlineSubsystem.h"
 #include "Presentation/ADMapComponent.h"
 #include "World/ADExplorationDirector.h"
+#include "World/ADTrafficManager.h"
+#include "World/ADDistrict.h"
+#include "Ownership/ADOwnershipSubsystem.h"
 
 namespace
 {
@@ -131,6 +134,9 @@ void AADHUD::DrawHUD()
     const FLinearColor White(.92f,.94f,.95f),Muted(.52f,.60f,.64f),Accent(.53f,.92f,.77f),Black(.015f,.023f,.031f,.82f);
     UADVehiclePhysicsComponent* Physics=Car->GetPhysics();
     const FADVehicleTelemetry& State=Physics->GetTelemetry();
+    const FADInputBindings DefaultBindings;
+    const auto& Bindings=Settings ? Settings->GetBindings() : DefaultBindings;
+    const auto KeyName=[&Bindings](const TCHAR* Id) { return Bindings.Get(Id).GetDisplayName().ToString().ToUpper(); };
     const AADGameMode* Mode=GetWorld()->GetAuthGameMode<AADGameMode>();
     FString Error;
     if (!Physics->IsReady()) { Error=Physics->GetInitializationError(); }
@@ -154,17 +160,15 @@ void AADHUD::DrawHUD()
         // A single footer keeps the car silhouette clear and gives hints a
         // consistent contrast backing at every supported viewport aspect ratio.
         Panel(0,978,1920,102,Black);
-        const FADInputBindings DefaultBindings;
-        const auto& Bindings=Settings ? Settings->GetBindings() : DefaultBindings;
-        const auto KeyName=[&Bindings](const TCHAR* Id) { return Bindings.Get(Id).GetDisplayName().ToString().ToUpper(); };
         Label(FString::Printf(TEXT("%s / %s  Pedals    %s / %s  Steer    %s  Handbrake    %s  Camera    %s  Recover"),
             *KeyName(TEXT("Keyboard.Throttle")),*KeyName(TEXT("Keyboard.Brake")),*KeyName(TEXT("Keyboard.SteerLeft")),
             *KeyName(TEXT("Keyboard.SteerRight")),*KeyName(TEXT("Keyboard.Handbrake")),*KeyName(TEXT("Keyboard.Camera")),
             *KeyName(TEXT("Keyboard.Recover"))),76,990,.70f,White);
-        Label(TEXT("G / L3  Garage    SHIFT / A  Nitrous    F2  Photo    F4  Replay    F10  Settings    M  Transmission    Q / E  Shift"),76,1026,.66f,Muted);
+        Label(FString::Printf(TEXT("G / L3  Garage    %s / D-PAD DOWN  Reverse    SHIFT / A  Nitrous    F2  Photo    F4  Replay    F10  Settings    M  Transmission    Q / E  Shift"),
+            *KeyName(TEXT("Keyboard.Reverse"))),76,1026,.66f,Muted);
         Label(TEXT("CONTROLLER"),1390,990,.70f,White);
         Label(TEXT("RT / LT  Pedals    LS  Steer"),1390,1019,.70f,Muted);
-        Label(TEXT("X  Handbrake    Y  Camera"),1390,1047,.70f,Muted);
+        Label(TEXT("X  Handbrake    Y  Camera    D-PAD DOWN  Reverse"),1390,1047,.70f,Muted);
     }
     else
     {
@@ -175,7 +179,8 @@ void AADHUD::DrawHUD()
             ? PC->GetRaceManager()->GetDefinition().Name.ToUpper() : District+TEXT(" / FREE DRIVE"),62,88,.73f,Muted);
         Panel(62,982,1115,48,Black);
         Panel(62,982,3,48,Accent);
-        Label(TEXT("F / B  RACE     G / L3  GARAGE     P / R3  PURSUIT     F5  MAP     C  CAMERA     ESC  PAUSE"),82,994,.66f,White);
+        Label(FString::Printf(TEXT("F / B  RACE     G / L3  GARAGE     P / R3  PURSUIT     F5  MAP     %s  REVERSE     C  CAMERA     ESC  PAUSE"),
+            *KeyName(TEXT("Keyboard.Reverse"))),82,994,.66f,White);
         if (Mode && Mode->GetAtmosphere() && Mode->GetAtmosphere()->IsReady())
         {
             const auto* Weather=Mode->GetAtmosphere();
@@ -316,6 +321,7 @@ void AADHUD::DrawMinimap()
         ? Mode->GetRegionalWorld()->GetCurrentDistrict().ToUpper() : TEXT("DOCKSIDE");
     Label(District,X+Width-145.f,Y+8.f,.52f,Muted);
     Panel(ClipMin.X,ClipMin.Y,ClipMax.X-ClipMin.X,ClipMax.Y-ClipMin.Y,FLinearColor(.025f,.049f,.059f,.82f));
+    const auto* Ownership=GetWorld()->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
 
     const auto DrawMapLine=[&](FVector2D A,FVector2D B,FLinearColor Color,float Thickness)
     {
@@ -333,8 +339,31 @@ void AADHUD::DrawMinimap()
         DrawMapLine(A,B,FLinearColor(.34f,.46f,.49f),1.5f);
     }
 
+    // These are live actor positions and saved landmark coordinates, not map-space decoration.
+    if (Mode && Mode->GetTrafficManager())
+    {
+        Mode->GetTrafficManager()->GetTrafficLocations(MinimapTrafficLocations);
+        for (const FVector2D& Location:MinimapTrafficLocations)
+        {
+            const FVector2D Point=Center+ADMinimapLayout::Project(Location,Player,Forward);
+            if (Point.X<ClipMin.X+3.f || Point.X>ClipMax.X-3.f || Point.Y<ClipMin.Y+3.f || Point.Y>ClipMax.Y-3.f) continue;
+            Panel(Point.X-3.f,Point.Y-3.f,6.f,6.f,FLinearColor(1.f,.48f,.22f));
+            Panel(Point.X-1.f,Point.Y-1.f,2.f,2.f,White);
+        }
+    }
+    if (Ownership && Ownership->IsReady())
+    {
+        for (const FADDiscoveryDefinition& Location:Ownership->GetDiscoveries())
+        {
+            const FVector2D Point=Center+ADMinimapLayout::Project(Location.Position,Player,Forward);
+            if (Point.X<ClipMin.X+3.f || Point.X>ClipMax.X-3.f || Point.Y<ClipMin.Y+3.f || Point.Y>ClipMax.Y-3.f) continue;
+            const bool bDiscovered=Exploration && Exploration->IsDiscovered(Location.Id);
+            const FLinearColor Color=bDiscovered ? Accent : FLinearColor(1.f,.72f,.30f);
+            Panel(Point.X-2.5f,Point.Y-2.5f,5.f,5.f,Color);
+        }
+    }
+
     const bool bPursuit=Mode && Mode->GetPoliceDirector() && Mode->GetPoliceDirector()->IsActive();
-    const auto* Ownership=GetWorld()->GetGameInstance()->GetSubsystem<UADOwnershipSubsystem>();
     const auto* Target=Exploration && Exploration->IsReady() ? Exploration->GetTrackedDiscovery() : nullptr;
     bool bHasWaypoint=false;
     bool bUsingCustomWaypoint=false;
@@ -396,7 +425,7 @@ void AADHUD::DrawMinimap()
         : (Exploration && Exploration->IsReady() ? static_cast<float>(Exploration->GetRouteDistanceCm()) : 0.f);
     const FString Footer=bHasWaypoint && RouteDistanceCm>0.f
         ? FString::Printf(TEXT("%.2f KM BY ROAD  /  F5 FULL MAP"),RouteDistanceCm/100000.f)
-        : TEXT("HEADING UP  /  F5 FULL MAP");
+        : TEXT("TRAFFIC  /  LANDMARKS  /  F5 FULL MAP");
     Label(Footer,X+17.f,Y+Height-25.f,.51f,Muted);
 }
 
@@ -412,10 +441,53 @@ void AADHUD::DrawMap()
     Label(TEXT("NOVA CITY / EXPLORE"),72,58,1.9f,White);
     Label(FString::Printf(TEXT("%d / %d LANDMARKS DISCOVERED"),Ownership->GetProfile().DiscoveredLocations.Num(),Ownership->GetDiscoveries().Num()),74,120,.78f,Muted);
     Panel(ADMapLayout::X,ADMapLayout::Y,ADMapLayout::Width,ADMapLayout::Height,FLinearColor(.025f,.045f,.055f));
+    const FVector2D MapMin(ADMapLayout::X+2.f,ADMapLayout::Y+2.f);
+    const FVector2D MapMax(ADMapLayout::X+ADMapLayout::Width-2.f,ADMapLayout::Y+ADMapLayout::Height-2.f);
+    const auto PointVisible=[&](FVector2D Point,float Margin=14.f)
+    { return Point.X>=MapMin.X+Margin && Point.X<=MapMax.X-Margin && Point.Y>=MapMin.Y+Margin && Point.Y<=MapMax.Y-Margin; };
     const auto Line=[&](FVector2D A,FVector2D B,FLinearColor Color,float Width)
     {
+        if (!ClipLineToRect(A,B,MapMin,MapMax)) return;
         DrawLine(UiOffsetX+A.X*UiScale,UiOffsetY+A.Y*UiScale,UiOffsetX+B.X*UiScale,UiOffsetY+B.Y*UiScale,Color,Width*UiScale);
     };
+    const FVector2D ViewA=Map->Unproject(MapMin),ViewB=Map->Unproject(MapMax);
+    const FVector2D WorldMin(FMath::Min(ViewA.X,ViewB.X),FMath::Min(ViewA.Y,ViewB.Y));
+    const FVector2D WorldMax(FMath::Max(ViewA.X,ViewB.X),FMath::Max(ViewA.Y,ViewB.Y));
+    constexpr double GridStep=20000.;
+    for (double X=FMath::CeilToInt(WorldMin.X/GridStep)*GridStep;X<=WorldMax.X;X+=GridStep)
+        Line(Map->Project(FVector2D(X,WorldMin.Y)),Map->Project(FVector2D(X,WorldMax.Y)),FLinearColor(.10f,.16f,.18f),1.f);
+    for (double Y=FMath::CeilToInt(WorldMin.Y/GridStep)*GridStep;Y<=WorldMax.Y;Y+=GridStep)
+        Line(Map->Project(FVector2D(WorldMin.X,Y)),Map->Project(FVector2D(WorldMax.X,Y)),FLinearColor(.10f,.16f,.18f),1.f);
+
+    if (const AADGameMode* Mode=GetWorld()->GetAuthGameMode<AADGameMode>())
+    {
+        if (const AADDistrict* Dockside=Mode->GetDistrict())
+        {
+            const FVector2D HalfExtent=Dockside->GetGroundHalfExtent();
+            const FVector2D A(-HalfExtent.X,-HalfExtent.Y),B(HalfExtent.X,-HalfExtent.Y);
+            const FVector2D C(HalfExtent.X,HalfExtent.Y),D(-HalfExtent.X,HalfExtent.Y);
+            const FLinearColor Border(.29f,.43f,.44f,.9f);
+            Line(Map->Project(A),Map->Project(B),Border,1.8f); Line(Map->Project(B),Map->Project(C),Border,1.8f);
+            Line(Map->Project(C),Map->Project(D),Border,1.8f); Line(Map->Project(D),Map->Project(A),Border,1.8f);
+            const FVector2D Center=Map->Project(FVector2D::ZeroVector);
+            if (PointVisible(Center,55.f)) Label(TEXT("DOCKSIDE"),Center.X-28.f,Center.Y,.5f,FLinearColor(.43f,.58f,.58f));
+        }
+        if (const AADRegionalWorld* Regional=Mode->GetRegionalWorld(); Regional && Regional->IsReady())
+        {
+            TArray<FADRegionalMapDistrict> Districts;
+            Regional->GetMapDistricts(Districts);
+            for (const FADRegionalMapDistrict& District:Districts)
+            {
+                const FVector2D A(District.Minimum.X,District.Minimum.Y),B(District.Maximum.X,District.Minimum.Y);
+                const FVector2D C(District.Maximum.X,District.Maximum.Y),D(District.Minimum.X,District.Maximum.Y);
+                const FLinearColor Border(.22f,.36f,.38f,.8f);
+                Line(Map->Project(A),Map->Project(B),Border,1.3f); Line(Map->Project(B),Map->Project(C),Border,1.3f);
+                Line(Map->Project(C),Map->Project(D),Border,1.3f); Line(Map->Project(D),Map->Project(A),Border,1.3f);
+                const FVector2D Center=Map->Project((District.Minimum+District.Maximum)*.5);
+                if (PointVisible(Center,55.f)) Label(District.Name.ToUpper(),Center.X-40.f,Center.Y,.48f,FLinearColor(.38f,.51f,.53f));
+            }
+        }
+    }
     for (const auto& Road:Exploration->GetRoadNetwork().GetSegments())
         Line(Map->Project(Road.Start),Map->Project(Road.End),FLinearColor(.16f,.25f,.29f),7.f);
     const auto& Route=Exploration->GetRoute();
@@ -431,9 +503,12 @@ void AADHUD::DrawMap()
             for (int32 Index=1;Index<PersonalRoute.Num();++Index)
                 Line(Map->Project(PersonalRoute[Index-1]),Map->Project(PersonalRoute[Index]),FLinearColor(.95f,.63f,.27f),2.f);
         const FVector2D Pin=Map->Project(Snapshot.CustomWaypoint);
-        Line(Pin+FVector2D(-9,-9),Pin+FVector2D(9,9),FLinearColor(.98f,.68f,.29f),3.f);
-        Line(Pin+FVector2D(-9,9),Pin+FVector2D(9,-9),FLinearColor(.98f,.68f,.29f),3.f);
-        Label(TEXT("WAYPOINT"),Pin.X+11,Pin.Y-12,.54f,FLinearColor(.98f,.68f,.29f));
+        if (PointVisible(Pin))
+        {
+            Line(Pin+FVector2D(-9,-9),Pin+FVector2D(9,9),FLinearColor(.98f,.68f,.29f),3.f);
+            Line(Pin+FVector2D(-9,9),Pin+FVector2D(9,-9),FLinearColor(.98f,.68f,.29f),3.f);
+            Label(TEXT("WAYPOINT"),Pin.X+11,Pin.Y-12,.54f,FLinearColor(.98f,.68f,.29f));
+        }
     }
 
     const auto* Career=GetWorld()->GetGameInstance()->GetSubsystem<UADCareerSubsystem>();
@@ -446,6 +521,7 @@ void AADHUD::DrawMap()
             const FADRaceDefinition* Race=RaceManager->GetRaceById(Chapter.RaceId);
             if (!Race || Race->Checkpoints.IsEmpty()) continue;
             const FVector2D Pin=Map->Project(FVector2D(Race->Checkpoints[0].Location));
+            if (!PointVisible(Pin)) continue;
             const bool bCurrent=Ownership->GetProfile().CompletedChapters.Num()==Index;
             const FLinearColor Color=bCurrent ? Accent : FLinearColor(.77f,.82f,.84f);
             Line(Pin+FVector2D(0,-9),Pin+FVector2D(8,7),Color,2.f);
@@ -457,15 +533,19 @@ void AADHUD::DrawMap()
     if (const auto* Mode=GetWorld()->GetAuthGameMode<AADGameMode>())
     {
         const FVector2D Pin=Map->Project(FVector2D(Mode->GetDrivingStartLocation()));
+        if (PointVisible(Pin))
+        {
         Panel(Pin.X-7,Pin.Y-7,14,14,FLinearColor(.92f,.55f,.28f));
         Panel(Pin.X-3,Pin.Y-3,6,6,Black);
         Label(TEXT("HOME GARAGE"),Pin.X+10,Pin.Y+3,.52f,FLinearColor(.98f,.67f,.39f));
+        }
     }
     const auto* Selected=Map->GetSelectedLocation();
     for (const int32 Index:Map->GetVisibleLocations())
     {
         const auto& Location=Ownership->GetDiscoveries()[Index];
         const FVector2D Point=Map->Project(Location.Position);
+        if (!PointVisible(Point)) continue;
         const bool bSelected=Selected && Selected->Id==Location.Id;
         const auto Color=Exploration->IsDiscovered(Location.Id) ? Accent : White;
         if (bSelected) Panel(Point.X-11,Point.Y-11,22,22,Accent);
@@ -482,6 +562,13 @@ void AADHUD::DrawMap()
         Line(Nose,Left,White,2.5f); Line(Left,TailRight,White,2.5f); Line(TailRight,Nose,White,2.5f);
     }
     Label(TEXT("N"),ADMapLayout::X+20,ADMapLayout::Y+15,.9f,Muted);
+    const float ScaleBarWidth=10000.f*Map->GetPixelsPerCentimeter();
+    const float ScaleBarX=ADMapLayout::X+ADMapLayout::Width-ScaleBarWidth-30.f;
+    const float ScaleBarY=ADMapLayout::Y+ADMapLayout::Height-28.f;
+    Line(FVector2D(ScaleBarX,ScaleBarY),FVector2D(ScaleBarX+ScaleBarWidth,ScaleBarY),White,2.f);
+    Line(FVector2D(ScaleBarX,ScaleBarY-5.f),FVector2D(ScaleBarX,ScaleBarY+5.f),White,2.f);
+    Line(FVector2D(ScaleBarX+ScaleBarWidth,ScaleBarY-5.f),FVector2D(ScaleBarX+ScaleBarWidth,ScaleBarY+5.f),White,2.f);
+    Label(TEXT("10 KM"),ScaleBarX+ScaleBarWidth*.5f-22.f,ScaleBarY-20.f,.48f,Muted);
     Panel(1292,174,570,780,FLinearColor(.035f,.058f,.065f));
     Label(Map->GetFilterName(),ADMapLayout::ListX+10,192,.85f,Accent);
     const int32 First=(Map->GetSelectedRow()/8)*8;
@@ -513,7 +600,7 @@ void AADHUD::DrawMap()
     Label(FString::Printf(TEXT("MAP SCALE  %.1fX"),Map->GetZoomFactor()),74,152,.59f,Muted);
     Label(TEXT("UP / DOWN  SELECT     LEFT / RIGHT  FILTER     CLICK LANDMARK  ROUTE     CLICK ROAD  PIN"),72,988,.66f,White);
     Label(TEXT("ESC / F5 / D-PAD LEFT  RETURN TO DRIVE"),72,1026,.70f,Accent);
-    Label(TEXT("I J K L  PAN   /   WHEEL  ZOOM"),1320,982,.58f,Muted);
+    Label(TEXT("I J K L  PAN   /   WHEEL  ZOOM   /   HOME  FIT"),1320,982,.58f,Muted);
     Label(TEXT("RACE START   /   HOME GARAGE   /   CUSTOM PIN"),1320,1006,.55f,Muted);
 }
 
@@ -566,6 +653,11 @@ void AADHUD::DrawGarage()
     };
     const auto* Paint = Ownership->GetPaints().FindByPredicate([&](const auto& P) { return P.Id == Draft.PaintId; });
     Row(0,TEXT("PAINT"),Paint ? Paint->Name.ToUpper() : TEXT("UNAVAILABLE"));
+    if (Paint)
+    {
+        Panel(600,241,30,34,FLinearColor(.62f,.72f,.76f));
+        Panel(603,244,24,28,Paint->Color);
+    }
     const auto& Upgrades = Ownership->GetUpgrades();
     for (int32 Index=0; Index<Upgrades.Num(); ++Index)
     {

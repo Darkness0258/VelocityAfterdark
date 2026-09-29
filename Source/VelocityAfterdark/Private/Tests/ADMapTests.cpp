@@ -18,6 +18,20 @@ bool FADMapProjectionTest::RunTest(const FString&)
         TestTrue(FString::Printf(TEXT("Projection round-trips at %.2fx zoom"),Zoom),Recovered.Equals(Point,.01));
     }
 
+    const FVector2D WorldMinimum(-96000.,-73000.),WorldMaximum(96000.,73000.);
+    const FVector2D WorldCenter=(WorldMinimum+WorldMaximum)*.5;
+    const float FitScale=ADMapLayout::FitScale(WorldMinimum,WorldMaximum);
+    const FVector2D TopLeft=ADMapLayout::Project(WorldMinimum,1.f,WorldCenter,FitScale);
+    const FVector2D BottomRight=ADMapLayout::Project(WorldMaximum,1.f,WorldCenter,FitScale);
+    TestTrue(TEXT("Auto-fit frames the real world bounds inside the map viewport"),
+        TopLeft.X>=ADMapLayout::X && TopLeft.Y>=ADMapLayout::Y
+        && BottomRight.X<=ADMapLayout::X+ADMapLayout::Width
+        && BottomRight.Y<=ADMapLayout::Y+ADMapLayout::Height);
+    TestTrue(TEXT("Fitted zoom reserves room for landmarks and district labels"),
+        TopLeft.X>ADMapLayout::X+25.f && TopLeft.Y>ADMapLayout::Y+25.f
+        && BottomRight.X<ADMapLayout::X+ADMapLayout::Width-25.f
+        && BottomRight.Y<ADMapLayout::Y+ADMapLayout::Height-25.f);
+
     FADRoadNetwork Roads;
     FString Error;
     if (!TestTrue(TEXT("Map uses the validated open-world road graph"),Roads.LoadDefault(Error)))

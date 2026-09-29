@@ -11,6 +11,11 @@ bool FADInputBindingsTest::RunTest(const FString&)
 {
     FADInputBindings Profile;
     FString Message;
+    TestTrue(TEXT("Keyboard reverse defaults to V"),Profile.Get(TEXT("Keyboard.Reverse"))==EKeys::V);
+    TestTrue(TEXT("Controller reverse defaults to D-pad down"),Profile.Get(TEXT("Gamepad.Reverse"))==EKeys::Gamepad_DPad_Down);
+    TestTrue(TEXT("Reverse key can be remapped"),Profile.Assign(TEXT("Keyboard.Reverse"),EKeys::X,Message));
+    TestTrue(TEXT("Reverse key remap is retained"),Profile.Get(TEXT("Keyboard.Reverse"))==EKeys::X);
+    Profile.ResetDevice(false);
     TestTrue(TEXT("Keyboard conflict swaps throttle and brake"),Profile.Assign(TEXT("Keyboard.Throttle"),EKeys::S,Message));
     TestTrue(TEXT("Throttle is S"),Profile.Get(TEXT("Keyboard.Throttle"))==EKeys::S);
     TestTrue(TEXT("Brake inherits W instead of becoming unbound"),Profile.Get(TEXT("Keyboard.Brake"))==EKeys::W);

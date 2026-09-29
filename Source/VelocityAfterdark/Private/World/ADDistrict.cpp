@@ -75,7 +75,7 @@ AADDistrict::AADDistrict()
         TEXT("/Game/Velocity/Materials/M_Asphalt_PolyHaven.M_Asphalt_PolyHaven"));
     if (AsphaltMaterial.Succeeded()) DetailedAsphaltMaterial = AsphaltMaterial.Object;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> BuildingMaterial(
-        TEXT("/Game/Velocity/Materials/M_Building_PBR_V3.M_Building_PBR_V3"));
+        TEXT("/Game/Velocity/Materials/M_Building_PBR_V4.M_Building_PBR_V4"));
     if (BuildingMaterial.Succeeded()) DetailedBuildingMaterial = BuildingMaterial.Object;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> ConcreteMaterial(
         TEXT("/Game/Velocity/Materials/M_Concrete_PBR_V3.M_Concrete_PBR_V3"));
@@ -149,6 +149,8 @@ void AADDistrict::BeginPlay()
     if (DetailedAsphaltMaterial) Materials.Add(TEXT("M_Asphalt"), DetailedAsphaltMaterial);
     if (DetailedBuildingMaterial) Materials.Add(TEXT("M_Building"), DetailedBuildingMaterial);
     if (DetailedConcreteMaterial) Materials.Add(TEXT("M_Concrete"), DetailedConcreteMaterial);
+    UE_LOG(LogTemp,Display,TEXT("AFTERDARK_BUILDING_SURFACE_READY: textured facade %s"),
+        DetailedBuildingMaterial ? TEXT("enabled") : TEXT("fallback"));
     AddBox(TEXT("M_Concrete"), FVector(0, 0, -105), FVector(GroundHalfExtent.X * 2., GroundHalfExtent.Y * 2., 200), true);
     BuildRoads();
     BuildBlocks();
@@ -197,6 +199,10 @@ bool AADDistrict::LoadDistrictArt()
         || !LoadFamily(Industrial,
             {TEXT("SM_Kenney_Industrial_ContainerA"),TEXT("SM_Kenney_Industrial_ContainerC")},ContainerMeshes))
         return false;
+    if (DetailedBuildingMaterial) Materials.Add(TEXT("KenneyCommercialKit"),DetailedBuildingMaterial);
+    if (UMaterialInterface* IndustrialMaterial=LoadObject<UMaterialInterface>(nullptr,
+        TEXT("/Game/Velocity/Materials/M_IndustrialMetal_PBR.M_IndustrialMetal_PBR")))
+        Materials.Add(TEXT("KenneyIndustrialKit"),IndustrialMaterial);
     TrafficSignalMesh=LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Velocity/External/KenneyCityKitRoads/SM_Kenney_Roads_TrafficLight.SM_Kenney_Roads_TrafficLight"));
     if (!TrafficSignalMesh)
     {
@@ -361,10 +367,10 @@ void AADDistrict::AddCylinder(FName MaterialName, const FVector& Center, const F
     GetBatch(MaterialName, false, true)->AddInstance(FTransform(FQuat::Identity, Center, Size / 100.));
 }
 
-void AADDistrict::AddDistrictMesh(UStaticMesh* Mesh,const FVector& Center,const FVector& Size,float Yaw)
+void AADDistrict::AddDistrictMesh(UStaticMesh* Mesh,const FVector& Center,const FVector& Size,float Yaw,FName MaterialName)
 {
     if (!Mesh || Size.ContainsNaN() || Size.GetMin()<=0.f) return;
-    UHierarchicalInstancedStaticMeshComponent* Batch=GetBatch(TEXT("KenneyCityKit"),false,false,Mesh);
+    UHierarchicalInstancedStaticMeshComponent* Batch=GetBatch(MaterialName,false,false,Mesh);
     const FBoxSphereBounds Bounds=Mesh->GetBounds();
     const FVector MeshSize=Bounds.BoxExtent*2.f;
     if (MeshSize.ContainsNaN() || MeshSize.GetMin()<=KINDA_SMALL_NUMBER) return;
@@ -455,7 +461,7 @@ void AADDistrict::BuildBlocks()
                     AddBuildingCollider(Center,Size);
                     // Kit container length is on local Y; rotate it to retain
                     // Dockside's east-west stack layout and true 12 m length.
-                    AddDistrictMesh(ContainerMeshes[Variant],Center,FVector(245,1200,280),90.f);
+                    AddDistrictMesh(ContainerMeshes[Variant],Center,FVector(245,1200,280),90.f,TEXT("KenneyIndustrialKit"));
                 }
                 continue;
             }
@@ -473,7 +479,8 @@ void AADDistrict::BuildBlocks()
                 const FVector BuildingCenter(P,Height*.5f);
                 const FVector BuildingSize(Width,Depth,Height);
                 AddBuildingCollider(BuildingCenter,BuildingSize,BuildingYaw);
-                AddDistrictMesh(BuildingMesh,BuildingCenter,BuildingSize,BuildingYaw);
+                AddDistrictMesh(BuildingMesh,BuildingCenter,BuildingSize,BuildingYaw,
+                    Block.Kind==TEXT("warehouse") ? TEXT("KenneyIndustrialKit") : TEXT("KenneyCommercialKit"));
                 continue;
             }
             AddBox(TEXT("M_Building"), FVector(P, Height * .5), FVector(Width, Depth, Height), true);
@@ -642,7 +649,7 @@ void AADDistrict::BuildStreetFurniture()
             const FVector2D Right(Approach.Y,-Approach.X);
             const FVector2D Position=Endpoint+Right*(RoadWidth*.5+220.f)-Approach*450.f;
             const float SignalYaw=FMath::RadiansToDegrees(FMath::Atan2(Approach.Y,Approach.X));
-            AddDistrictMesh(TrafficSignalMesh,FVector(Position,260.f),FVector(70.f,70.f,520.f),SignalYaw);
+            AddDistrictMesh(TrafficSignalMesh,FVector(Position,260.f),FVector(70.f,70.f,520.f),SignalYaw,TEXT("KenneyCityKit"));
             AddBox(TEXT("M_Concrete"),FVector(Position,260.f),FVector(70.f,70.f,520.f),true,SignalYaw);
         }
     }

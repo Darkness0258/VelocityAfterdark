@@ -90,6 +90,7 @@ private:
     bool bReady = false;
     bool bAutomatic = true;
     bool bHandbrake = false;
+    bool bBrakeDirectionChangeConsumed = false;
     float ThrottleInput = 0.f;
     float RoadWetness = 0.f;
     float NitrousMultiplier = 1.f;

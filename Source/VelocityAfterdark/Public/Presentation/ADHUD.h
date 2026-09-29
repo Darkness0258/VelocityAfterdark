@@ -23,6 +23,7 @@ private:
     float UiOffsetX=0;
     float UiOffsetY=0;
     TArray<FVector2D> MinimapWaypointRoute;
+    TArray<FVector2D> MinimapTrafficLocations;
     FVector2D MinimapLastRouteStart=FVector2D::ZeroVector;
     FVector2D MinimapLastRouteGoal=FVector2D::ZeroVector;
     double MinimapLastRouteUpdate=-1.;
