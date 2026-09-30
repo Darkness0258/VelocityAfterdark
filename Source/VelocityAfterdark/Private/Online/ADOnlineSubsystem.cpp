@@ -151,7 +151,11 @@ void UADOnlineSubsystem::MapLoaded(UWorld* World)
     else if (Transition==ETransition::Joining && World->GetNetMode()==NM_Client)
         Status=TEXT("Joined direct-connect free roam at ")+PendingAddress+TEXT(".");
     else if (Transition==ETransition::Disconnecting && World->GetNetMode()==NM_Standalone)
+    {
         Status=TEXT("Returned to offline driving.");
+        if (FParse::Param(FCommandLine::Get(),TEXT("AfterdarkNetDriveProbe")))
+            UE_LOG(LogTemp,Display,TEXT("AFTERDARK_NET_CLIENT_RETURNED_TO_OFFLINE: session travel completed."));
+    }
     else Status=TEXT("The requested network session did not open. You can retry from free drive.");
     Transition=ETransition::None;
     PendingAddress.Reset();

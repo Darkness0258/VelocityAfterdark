@@ -463,12 +463,22 @@ void AADRegionalWorld::BuildResidentRoads()
             for (const auto& Other : LegacyRoads)
                 if (IsCrossStreet(Other,LegacyRoadWidth)) { bConnectedCrossStreet=true; break; }
             if (!bConnectedCrossStreet) continue;
-            const FVector2D SignalPoint = Endpoint+Right*(RoadWidth*.5+220.)-Approach*450.;
+            // Put the signal at the outside corner of the junction. A 4.5 m
+            // approach offset placed its collision proxy inside the perpendicular
+            // street, where traffic and race AI could stop against the pole.
+            const double JunctionCornerClearance=FMath::Max(RoadWidth,LegacyRoadWidth)*.5+220.;
+            const FVector2D SignalPoint = Endpoint+Right*(RoadWidth*.5+220.)-Approach*JunctionCornerClearance;
             const float SignalHeading = FMath::RadiansToDegrees(FMath::Atan2(Approach.Y,Approach.X));
             const FVector SignalPosition(SignalPoint,260.f);
             const FRotator SignalRotation(0,SignalHeading,0);
             AddResidentMesh(TrafficSignal->GetFName(),TrafficSignal,SignalPosition,FVector(70.f,70.f,520.f),SignalRotation);
-            AddResidentCollision(TEXT("Concrete"),SignalPosition,FVector(70.f,70.f,520.f),SignalRotation);
+            const FBox2D SignalFootprint(SignalPoint-FVector2D(40.f),SignalPoint+FVector2D(40.f));
+            // Retain the visual signal if a future road layout crowds this
+            // corner, but never create an invisible collider in a drivable lane.
+            if (IsRoadClear(SignalFootprint,0.))
+                AddResidentCollision(TEXT("Concrete"),SignalPosition,FVector(70.f,70.f,520.f),SignalRotation);
+            else
+                UE_LOG(LogADRegionalWorld,Warning,TEXT("Traffic signal at %s overlaps a drivable road; visual retained without a blocking proxy."),*SignalPoint.ToString());
         }
     }
 }

@@ -34,6 +34,8 @@ $result = [ordered]@{
     clientReceivedReplicatedTelemetry = $false
     serverObservedJoin = $false
     serverObservedDisconnect = $false
+    clientRequestedDisconnect = $false
+    clientReturnedToOffline = $false
     passed = $false
     scope = 'Two packaged processes on loopback; validates listen/join/map load, one client drive RPC causing authoritative server movement, returned speed telemetry, and server-observed disconnect. Four-player capacity, external networks, NAT, latency/loss and host migration are not covered.'
     endedUtc = ''
@@ -45,6 +47,18 @@ function Wait-ForLog([string]$Path,[string]$Pattern,[int]$TimeoutSeconds) {
     do {
         if (Test-Path -LiteralPath $Path) {
             if (Select-String -LiteralPath $Path -Pattern $Pattern -Quiet) { return $true }
+        }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    return $false
+}
+function Wait-ForServerDisconnect([string]$Path,[int]$TimeoutSeconds) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        if ((Test-Path -LiteralPath $Path) -and
+            (Select-String -LiteralPath $Path -Pattern 'LogNet: UNetConnection::Close:.*RemoteAddr:' -Quiet) -and
+            (Select-String -LiteralPath $Path -Pattern 'LogNet: UNetDriver::RemoveClientConnection - Removed address' -Quiet)) {
+            return $true
         }
         Start-Sleep -Milliseconds 250
     } while ((Get-Date) -lt $deadline)
@@ -82,13 +96,17 @@ try {
     if (-not $result.clientReceivedReplicatedTelemetry) { throw "Client did not receive a moving-vehicle telemetry update from the server. Inspect $clientLog" }
     $hostProcess.Refresh()
     if ($hostProcess.HasExited) { throw "Listen server exited while the client was connected. Inspect $hostLog" }
+    $result.clientRequestedDisconnect = Wait-ForLog $clientLog 'AFTERDARK_NET_DISCONNECT_REQUESTED' 5
+    if (-not $result.clientRequestedDisconnect) { throw "Client did not request the normal return-to-offline path. Inspect $clientLog" }
+    $result.clientReturnedToOffline = Wait-ForLog $clientLog 'AFTERDARK_NET_CLIENT_RETURNED_TO_OFFLINE' 15
+    if (-not $result.clientReturnedToOffline) { throw "Client did not complete travel back to offline driving. Inspect $clientLog" }
+    $result.serverObservedDisconnect = Wait-ForServerDisconnect $hostLog 15
+    if (-not $result.serverObservedDisconnect) { throw "Listen server did not observe client disconnect. Inspect $hostLog" }
     Stop-SmokeProcess $clientProcess
     if ($clientProcess) {
         $clientProcess.Refresh()
         if ($clientProcess.HasExited) { $result.clientExitCode = $clientProcess.ExitCode }
     }
-    $result.serverObservedDisconnect = Wait-ForLog $hostLog 'UNetConnection::Cleanup: Closing open connection' 15
-    if (-not $result.serverObservedDisconnect) { throw "Listen server did not observe client disconnect. Inspect $hostLog" }
     $result.passed = $true
 } finally {
     Stop-SmokeProcess $clientProcess

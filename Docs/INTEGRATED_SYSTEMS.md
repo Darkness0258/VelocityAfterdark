@@ -18,7 +18,7 @@ Garage requests cannot change credits, progression, discoveries or world state. 
 
 `AADTrafficManager` runs physical drivers on the existing circuit loop with two timed signals. Failed cars freeze and cannot restart; after five seconds and 150 m of separation they can retire. Bounded distant-road candidates refill traffic with ground/occupancy checks. This is not citywide lane/junction traffic or a civilian vehicle roster.
 
-`AADPoliceDirector` owns patrol/pursuit/search/cooldown/busted states and heat 0–5. Retired units cannot observe or arrest. An active pursuit has bounded dispatches instead of endless replacement; increased heat can authorize another unit. Full PIT/boxing, roadblocks, spikes, helicopters, arrest economics and regional coordination remain open.
+`AADPoliceDirector` owns patrol/pursuit/search/cooldown/busted states and heat 0–5. Retired units cannot observe or arrest. An active pursuit has bounded dispatches instead of endless replacement; increased heat can authorize another unit. Source includes a cooldown-gated high-heat PIT impulse and a two-unit roadblock ahead on the route, but current automation does not directly test either behavior or partial-spawn rollback. Boxing, spike strips, helicopters, arrest economics and regional coordination remain open.
 
 `AADRegionalWorld` keeps road collision resident and streams scenery with hysteresis, a cell cap and update budget. Approximately 7.1 km of new centerlines connect to the original 3.9 km. Roads are flat; scenery uses non-colliding development primitives. This is not authored World Partition production content.
 

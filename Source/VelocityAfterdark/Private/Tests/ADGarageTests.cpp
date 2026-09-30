@@ -217,7 +217,6 @@ public:
             if (!Test->TestTrue(TEXT("Stock definition installs before physical run"), Garage->CommitChanges())) return true;
             Garage->Leave();
             Car->ResetVehicle();
-            ResetPose = Car->GetActorTransform();
             Physics->SetControls(0.f, 0.f, 0.f, false);
             Stage = 1; Frames = 0;
             return false;
@@ -242,8 +241,10 @@ public:
                 return true;
             }
             StockSpeed = Speed;
+            const FTransform LatestSafePose=Car->GetRecoveryTransformForAutomation();
             Car->ResetVehicle();
-            Test->TestTrue(TEXT("Second launch starts from the identical reset pose"), Car->GetActorTransform().Equals(ResetPose, .01f));
+            Test->TestTrue(TEXT("Second launch reset returns to the latest safe recovery pose"),
+                Car->GetActorTransform().Equals(LatestSafePose,.01f));
             if (!Test->TestTrue(TEXT("Stopped comparison car enters garage"), Garage->Enter())) return true;
             SelectRow(Garage, 1);
             Garage->AdjustSelection(1);
@@ -264,7 +265,6 @@ private:
     int32 Stage = 0;
     int32 Frames = 0;
     float StockSpeed = 0.f;
-    FTransform ResetPose;
 };
 }
 

@@ -6,7 +6,7 @@
 |---|---|---|
 | Rival memory | Bounded profile records, race-result updates, and rival-specific briefing/victory text are implemented. | Career route automation checks Ivo/Sel context changes; no focused profile save/reload test yet isolates rival-memory round-trip. |
 | AI driver personalities | Data-defined overtaking, braking and pressure-mistake weights are implemented and applied to driving decisions. | Catalog validation and full physical races pass; no A/B test asserts that each weight produces a measured behavior difference. |
-| Police PIT / roadblocks | Not implemented. Coordinated PIT, roadblocks, spike strips and helicopter support remain open. | Current living-world tests cover pursuit/search integration, not these tactics. |
+| Police PIT / roadblocks | Source implements a heat-3, cooldown-gated rear-quarter impulse and a heat-4 pair of road-graph roadblock units, limited to one deployment per pursuit. | The living-world test covers pursuit/search, but does not directly assert PIT activation, roadblock placement, blocking effect, or spawn-failure recovery. Treat both tactics as unverified gameplay until those checks pass. Spike strips, helicopter support, boxing, and coordinated regional interception remain unimplemented. |
 | Sprint / point-to-point | Implemented as zero-lap races with ordered directed gates and an endpoint finish. | Portable rules, race catalog validation and a full physical regional sprint pass. |
 | Traffic reacting to pursuits | Implemented: nearby traffic receives emergency-yield instructions during an active pursuit. | Living-world pursuit integration passes; traffic-response distances/lanes still need a dedicated behavior test. |
 | Photo depth of field and filters | Implemented with focal distance, aperture, exposure and four color looks. | Photo/replay mode state and return behavior pass; visual effect quality and screenshot capture still need human review. |
@@ -32,11 +32,9 @@ Implemented: race definitions load three bounded personality weights, and the AI
 
 ## 3. Police PIT / roadblocks
 
-`AADPoliceDirector` already runs patrol → pursuit → search → cooldown → busted. PIT and roadblocks are the two "future police systems" items your own architecture doc names as unbuilt.
+`AADPoliceDirector` contains working source paths for both tactics. At heat 3 or above, a pursuing interceptor applies one impulse only when it has direct control, is moving in the player's direction, is inside a rear-quarter position/speed window, and its per-unit five-second cooldown is clear. At heat 4 or above, the director tries to add a pair of stationary angled units about 105 m ahead on the validated pursuit route. A successful pair is dispatched once per pursuit; failed spawns are rolled back and retried later. Neither mechanic teleports the player or uses client-authoritative force.
 
-- **PIT**: heat-gated — an interceptor within a lateral/speed window applies one scripted force impulse to the player's rear quarter. Reuses existing collision/force application; no new vehicle-vehicle physics.
-- **Roadblocks**: spawn 1–2 units ahead on the player's road-graph position at high heat, using the same distant-road refill logic `AADTrafficManager` already has for traffic.
-- **Effort**: PIT is small (one scripted force + cooldown); roadblocks are medium (needs road-graph lookahead, which `FADRoadNetwork` already exposes).
+These paths currently have no focused behavior regression. Add a deterministic high-heat PIE test for pursuit escalation, both roadblock units and placement, player collision/avoidance, PIT impulse direction/magnitude, cooldown, and failed/partial-spawn rollback before describing either mechanic as runtime-verified.
 
 ## 4. Sprint / point-to-point race type
 
@@ -58,7 +56,7 @@ Implemented: photo mode controls focal distance, aperture and exposure, and offe
 
 ## Sequencing
 
-Outstanding checks: add an isolated rival-memory save/reload test, A/B behavior tests for personality weights, and a traffic shoulder/braking assertion during pursuit. PIT and roadblocks remain unimplemented; keep future tactics separate from evidence that already passes.
+Outstanding checks: add an isolated rival-memory save/reload test, A/B behavior tests for personality weights, a traffic shoulder/braking assertion during pursuit, and focused PIT/roadblock behavior and rollback tests. Keep unverified source behavior separate from results that already pass.
 
 ## Building these
 

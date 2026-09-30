@@ -406,15 +406,21 @@ public:
                 StageStart=Now;
                 return false;
             }
-            Test->TestEqual(TEXT("Automatic brake at rest selects reverse"),State.Gear,-1);
+            Test->TestEqual(TEXT("Automatic brake at rest remains a service brake"),State.Gear,1);
             PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::S,IE_Released,0.f));
             break;
         case 11:
             if (auto* Chassis = Cast<UPrimitiveComponent>(Car->GetRootComponent()))
             {
+                // Select reverse explicitly at rest before testing the
+                // reverse-to-drive interlock during a lateral slide.
+                Car->GetPhysics()->RequestReverse();
+                Test->TestEqual(TEXT("Explicit reverse is selected before the lateral-slide interlock test"),
+                    Car->GetPhysics()->GetTelemetry().Gear,-1);
                 Chassis->SetPhysicsLinearVelocity(Car->GetActorRightVector()*3000.f);
                 Car->GetPhysics()->ShiftUp();
-                Test->TestEqual(TEXT("Reverse-to-drive is blocked during a sideways slide"),State.Gear,-1);
+                Test->TestEqual(TEXT("Reverse-to-drive is blocked during a sideways slide"),
+                    Car->GetPhysics()->GetTelemetry().Gear,-1);
             }
             Car->ResetVehicle();
             if (auto* Chassis = Cast<UPrimitiveComponent>(Car->GetRootComponent()))

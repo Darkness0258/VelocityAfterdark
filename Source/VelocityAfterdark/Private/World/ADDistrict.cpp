@@ -647,10 +647,20 @@ void AADDistrict::BuildStreetFurniture()
             if (!bCrossStreet) continue;
             const FVector2D Approach=bAtEnd ? Direction : -Direction;
             const FVector2D Right(Approach.Y,-Approach.X);
-            const FVector2D Position=Endpoint+Right*(RoadWidth*.5+220.f)-Approach*450.f;
+            // Place the mast beyond both intersecting road edges. The old 4.5 m
+            // approach offset put the blocking proxy in the cross street, where
+            // race AI stopped and players could snag a wheel on the light.
+            const float JunctionCornerClearance=RoadWidth*.5f+220.f;
+            const FVector2D Position=Endpoint+Right*JunctionCornerClearance-Approach*JunctionCornerClearance;
             const float SignalYaw=FMath::RadiansToDegrees(FMath::Atan2(Approach.Y,Approach.X));
             AddDistrictMesh(TrafficSignalMesh,FVector(Position,260.f),FVector(70.f,70.f,520.f),SignalYaw,TEXT("KenneyCityKit"));
-            AddBox(TEXT("M_Concrete"),FVector(Position,260.f),FVector(70.f,70.f,520.f),true,SignalYaw);
+            bool bSignalColliderClear=true;
+            for (const FADRoadSegment& CandidateRoad:Roads)
+                if (InsideRoad(Position,CandidateRoad,RoadWidth*.5f+40.f)) { bSignalColliderClear=false; break; }
+            if (bSignalColliderClear)
+                AddBox(TEXT("M_Concrete"),FVector(Position,260.f),FVector(70.f,70.f,520.f),true,SignalYaw);
+            else
+                UE_LOG(LogTemp,Warning,TEXT("Dockside signal at %s overlaps a road; visual retained without a blocking collider."),*Position.ToString());
         }
     }
     // Light objects have a hard bound, independent of scenery density. Emissive

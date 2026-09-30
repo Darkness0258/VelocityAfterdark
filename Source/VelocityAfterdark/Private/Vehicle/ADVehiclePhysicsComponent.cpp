@@ -131,7 +131,6 @@ void UADVehiclePhysicsComponent::ResetState()
     SetControls(0.f, 0.f, 0.f, false);
     SteeringDegrees = 0.f;
     ShiftCooldown = 0.f;
-    bBrakeDirectionChangeConsumed = false;
     CurrentGear = 1;
     CurrentRpm = Definition.IdleRpm;
     Telemetry = FADVehicleTelemetry();
@@ -224,20 +223,6 @@ void UADVehiclePhysicsComponent::RequestReverse()
 void UADVehiclePhysicsComponent::UpdateTransmission(float DeltaTime, float ForwardSpeedMps)
 {
     ShiftCooldown = FMath::Max(0.f, ShiftCooldown - DeltaTime);
-    // In automatic mode, holding the brake fully stopped selects the opposite
-    // direction once. This gives players a familiar reverse path without
-    // allowing a brake hold to toggle repeatedly or shift while rolling.
-    if (!bAutomatic || BrakeInput < .1f)
-    {
-        bBrakeDirectionChangeConsumed = false;
-    }
-    else if (!bBrakeDirectionChangeConsumed && IsValid(Chassis)
-        && Chassis->GetPhysicsLinearVelocity().Size() * .01 < .25
-        && ShiftCooldown <= 0.f)
-    {
-        ChangeGear(CurrentGear == -1 ? 1 : -1);
-        bBrakeDirectionChangeConsumed = true;
-    }
     const float RoadRpm = static_cast<float>(ADVehicleMath::EngineRpm(GetDrivenWheelSurfaceSpeedMps(), Definition.WheelRadiusM,
         GetGearRatio(), Definition.FinalDrive, Definition.IdleRpm, Definition.RedlineRpm));
     // A simple automatic launch clutch lets the engine rise above idle at low speed.

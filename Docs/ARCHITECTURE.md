@@ -139,9 +139,9 @@ The controller binds race commands and reads the manager's input gate; HUD and m
 
 The Phase 2 race is local and authority-guarded. Authority checks do not supply replication, network clock synchronization or anti-cheat. Those remain Phase 9 integration work.
 
-## Future police systems
+## Police system and future pursuit tactics
 
-Later police use patrol → pursuing → lost sight → searching → escaped/busted, with explicit transitions. Detection needs line of sight and observer knowledge, not omniscient position. An incident coordinator assigns interception sectors, finite roadblocks and search areas. Heat escalation is driven by authored policy and evidence. Safehouses work only after required pursuit conditions. Pedestrians remain in protected scenery areas and are not collision targets.
+The Dockside prototype implements patrol → pursuit → search → cooldown/busted, heat escalation, observer line-of-sight checks, physical interceptors, a gated rear-quarter PIT impulse and a paired route-ahead roadblock at high heat. The PIT and roadblock paths still need direct runtime tests for placement, counterplay, cooldown and spawn rollback. A future incident coordinator can add regional interception/search areas, while spike strips, helicopter support, broader arrest consequences and safehouse rules remain separate work. Pedestrians remain in protected scenery areas and are not collision targets.
 
 ## Career and original narrative plan
 

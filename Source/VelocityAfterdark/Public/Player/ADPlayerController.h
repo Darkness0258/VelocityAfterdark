@@ -97,6 +97,7 @@ private:
     void GarageZoomOut();
     void DiagnosticsInput() { bShowDiagnostics = !bShowDiagnostics; }
     void DeviceConnectionChanged(EInputDeviceConnectionState State, FPlatformUserId User, FInputDeviceId Device);
+    void DisconnectAfterNetworkProbe();
     UInputAction* AddAction(const TCHAR* Name, EInputActionValueType Type, bool bWhenPaused = false);
 
     UPROPERTY(Transient) TObjectPtr<UInputMappingContext> DrivingMappings;
@@ -118,6 +119,7 @@ private:
     float NetworkProbeCountdown=0.f;
     float NetworkProbeDriveRemaining=0.f;
     float NetworkProbeObserveRemaining=0.f;
+    float NetworkProbeDisconnectCountdown=0.f;
     bool bNetworkProbeDriveFinished=false;
     UPROPERTY(Transient) TObjectPtr<AADAtmosphere> ClientEnvironment;
     UPROPERTY(Transient) TObjectPtr<AADRegionalWorld> ClientRegions;

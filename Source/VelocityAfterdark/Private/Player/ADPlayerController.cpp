@@ -29,6 +29,7 @@
 #include "InputKeyEventArgs.h"
 #include "Settings/ADInputBindings.h"
 #include "Misc/Parse.h"
+#include "TimerManager.h"
 
 AADPlayerController::AADPlayerController()
 {
@@ -68,6 +69,14 @@ void AADPlayerController::BeginPlay()
 }
 
 AADVehiclePawn* AADPlayerController::GetVehiclePawn() const { return Cast<AADVehiclePawn>(GetPawn()); }
+
+void AADPlayerController::DisconnectAfterNetworkProbe()
+{
+    if (UADOnlineSubsystem* Online=GetGameInstance()->GetSubsystem<UADOnlineSubsystem>())
+        Online->Disconnect();
+    else
+        UE_LOG(LogTemp,Error,TEXT("AFTERDARK_NET_DISCONNECT_FAILED: online subsystem is unavailable."));
+}
 
 void AADPlayerController::PlayerTick(float DeltaTime)
 {
@@ -118,11 +127,27 @@ void AADPlayerController::PlayerTick(float DeltaTime)
             if (FMath::IsFinite(Speed) && Speed>10.f)
             {
                 UE_LOG(LogTemp,Display,TEXT("AFTERDARK_NET_TELEMETRY_CONFIRMED: replicated speed %.1f km/h."),Speed);
+                // Exercise the real leave-session travel path after the probe
+                // has confirmed a server-replicated vehicle update. Killing
+                // this QA process only tests Unreal's later timeout behavior.
+                // Leave a short observation window so the harness can record
+                // the telemetry assertion before the client travels away.
+                NetworkProbeDisconnectCountdown=1.5f;
             }
             else
             {
                 UE_LOG(LogTemp,Error,TEXT("AFTERDARK_NET_TELEMETRY_FAILED: replicated speed remained %.1f km/h."),Speed);
             }
+        }
+    }
+    if (NetworkProbeDisconnectCountdown>0.f)
+    {
+        NetworkProbeDisconnectCountdown=FMath::Max(0.f,NetworkProbeDisconnectCountdown-DeltaTime);
+        if (NetworkProbeDisconnectCountdown==0.f)
+        {
+            UE_LOG(LogTemp,Display,TEXT("AFTERDARK_NET_DISCONNECT_REQUESTED: returning to offline driving."));
+            GetWorld()->GetTimerManager().SetTimerForNextTick(
+                FTimerDelegate::CreateUObject(this,&AADPlayerController::DisconnectAfterNetworkProbe));
         }
     }
     auto* LocalCar=GetVehiclePawn();
